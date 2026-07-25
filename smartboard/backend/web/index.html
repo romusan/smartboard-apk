@@ -1,0 +1,25 @@
+﻿<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SmartBoard Viewer</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <aside>
+    <h1>SmartBoard</h1>
+    <label>Sesión <input id="session" value="demo" /></label>
+    <button id="connect">Conectar</button>
+    <button id="ask">Consultar IA</button>
+    <button id="exportPng">Exportar PNG</button>
+    <p id="status">Desconectado</p>
+    <textarea id="context" placeholder="Contexto para Ollama"></textarea>
+    <pre id="ai"></pre>
+  </aside>
+  <main>
+    <canvas id="board"></canvas>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+﻿name: SmartBoard CI
+
+on:
+  push:
+    paths:
+      - 'smartboard/**'
+      - '.github/workflows/smartboard.yml'
+  pull_request:
+    paths:
+      - 'smartboard/**'
+      - '.github/workflows/smartboard.yml'
+  workflow_dispatch:
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: smartboard/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements.txt
+      - run: pytest -q
+
+  android-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: smartboard/android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.10.2
+      - run: gradle testDebugUnitTest assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: smartboard-debug-apk
+          path: smartboard/android/app/build/outputs/apk/debug/app-debug.apk
