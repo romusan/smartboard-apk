@@ -56,6 +56,15 @@ fun SmartBoardApp(vm: BoardViewModel) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
                 items(AiActions.size) { index -> Button(onClick = { vm.askAi(AiActions[index].second) }) { Text(AiActions[index].first) } }
             }
+            val aiStatus by vm.aiStatus
+            val recognizedText by vm.recognizedText
+            if (aiStatus.isNotBlank() || recognizedText.isNotBlank()) {
+                Text(
+                    text = aiStatus.ifBlank { "Leí: $recognizedText" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
             BoardCanvas(vm, color, width, lasso, Modifier.fillMaxSize())
         }
     }

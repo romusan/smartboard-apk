@@ -21,6 +21,12 @@ function render() {
   for (const stroke of strokes.values()) drawStroke(stroke);
 }
 
+function resetBoard() {
+  strokes.clear();
+  aiEl.textContent = '';
+  render();
+}
+
 function drawStroke(stroke) {
   if (!stroke.points || stroke.points.length < 2) return;
   ctx.save();
@@ -41,6 +47,7 @@ function drawStroke(stroke) {
 function applyMessage(msg) {
   const payload = msg.payload || {};
   if (msg.type === 'sync_state') {
+    resetBoard();
     for (const item of payload.history || []) applyMessage(item);
     render();
     return;
@@ -59,6 +66,37 @@ function applyMessage(msg) {
   if (msg.type === 'ai_response') aiEl.textContent = `${payload.kind || 'text'}\n\n${payload.content || ''}`;
 }
 
+async function refreshHistory() {
+  const sessionId = encodeURIComponent(sessionEl.value || 'demo');
+  statusEl.textContent = 'Actualizando...';
+  const response = await fetch(`/sessions/${sessionId}`);
+  const data = await response.json();
+  resetBoard();
+  for (const item of data.messages || []) applyMessage(item);
+  render();
+  statusEl.textContent = ws?.readyState === WebSocket.OPEN ? 'Conectado' : 'Desconectado';
+}
+
+function clearBoardRemote() {
+  const strokeIds = [...strokes.keys()];
+  if (!strokeIds.length) {
+    resetBoard();
+    return;
+  }
+  const message = {
+    type: 'erase',
+    session_id: sessionEl.value || 'demo',
+    client_id: 'web-viewer',
+    page_id: 'page-1',
+    timestamp: Date.now(),
+    version: 1,
+    payload: { stroke_ids: strokeIds }
+  };
+  applyMessage(message);
+  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
+  else pending.push(message);
+}
+
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws/${encodeURIComponent(sessionEl.value || 'demo')}`);
@@ -69,6 +107,8 @@ function connect() {
 }
 
 document.getElementById('connect').onclick = connect;
+document.getElementById('refresh').onclick = refreshHistory;
+document.getElementById('clear').onclick = clearBoardRemote;
 document.getElementById('exportPng').onclick = () => {
   const a = document.createElement('a');
   a.href = canvas.toDataURL('image/png');

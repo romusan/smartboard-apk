@@ -1,20 +1,27 @@
 ﻿package edu.umng.smartboard.ui
 
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
+import edu.umng.smartboard.ai.HandwritingRecognizer
 import edu.umng.smartboard.model.BoardMessage
 import edu.umng.smartboard.model.BoardPoint
 import edu.umng.smartboard.model.Stroke
 import edu.umng.smartboard.net.BoardSocketClient
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 class BoardViewModel : ViewModel() {
     val socket = BoardSocketClient()
     val strokes = mutableStateListOf<Stroke>()
     val undone = mutableStateListOf<Stroke>()
+    val recognizedText = mutableStateOf("")
+    val aiStatus = mutableStateOf("")
     var sessionId = "demo"
     private val gson = Gson()
+    private val handwritingRecognizer = HandwritingRecognizer()
 
     fun connect(server: String, session: String) {
         sessionId = session.ifBlank { "demo" }
@@ -41,7 +48,28 @@ class BoardViewModel : ViewModel() {
     fun newPage() = send("page_create", mapOf("page_id" to UUID.randomUUID().toString()))
 
     fun askAi(action: String, selected: List<Stroke> = strokes.toList()) {
-        send("ai_request", mapOf("action" to action, "strokes" to selected, "recognized_text" to "", "page_context" to "Página enviada desde APK"))
+        viewModelScope.launch {
+            aiStatus.value = "Leyendo escritura..."
+            val text = runCatching { handwritingRecognizer.recognize(selected) }
+                .onFailure { aiStatus.value = "No pude leer la escritura: ${it.message}" }
+                .getOrDefault("")
+                .trim()
+            recognizedText.value = text
+            aiStatus.value = if (text.isBlank()) {
+                "Consulta enviada sin texto reconocido."
+            } else {
+                "Leí: $text"
+            }
+            send(
+                "ai_request",
+                mapOf(
+                    "action" to action,
+                    "strokes" to selected,
+                    "recognized_text" to text,
+                    "page_context" to "Página enviada desde APK. Pregunta manuscrita: $text"
+                )
+            )
+        }
     }
 
     fun sendStroke(type: String, stroke: Stroke) = send(type, mapOf("stroke" to stroke), stroke.id)

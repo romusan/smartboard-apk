@@ -10,14 +10,16 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
-from .models import AiRequest, BoardMessage
+from .models import AiRequest, AiResponse, BoardMessage
 from .ollama import query_ollama
 from .store import SessionStore
+from .tutor_adapter import query_tutor_materials
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.getenv("SMARTBOARD_DATA", ROOT / "sessions"))
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+AI_PROVIDER = os.getenv("SMARTBOARD_AI_PROVIDER", "tutor").strip().lower()
 
 app = FastAPI(title="SmartBoard Vector Sync", version="0.1.0")
 store = SessionStore(DATA_DIR)
@@ -40,9 +42,9 @@ async def session_history(session_id: str) -> dict:
 @app.post("/ai/query")
 async def ai_query(request: AiRequest) -> dict:
     try:
-        result = await query_ollama(OLLAMA_URL, OLLAMA_MODEL, request)
+        result = await run_ai(request)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Ollama no respondió: {exc}") from exc
+        raise HTTPException(status_code=502, detail=f"Tutor_materias/Ollama no respondió: {exc}") from exc
     message = BoardMessage(
         type="ai_response",
         session_id=request.session_id,
@@ -53,6 +55,32 @@ async def ai_query(request: AiRequest) -> dict:
     await store.append(message)
     await broadcast(request.session_id, message.model_dump())
     return result.model_dump()
+
+async def run_ai(request: AiRequest) -> AiResponse:
+    if AI_PROVIDER in {"tutor", "tutor_materias", "materials"}:
+        return await query_tutor_materials(request)
+    return await query_ollama(OLLAMA_URL, OLLAMA_MODEL, request)
+
+async def handle_ai_request(message: BoardMessage) -> BoardMessage:
+    payload = message.payload or {}
+    request = AiRequest(
+        action=payload.get("action", "explain"),
+        session_id=message.session_id,
+        page_id=message.page_id,
+        selection_id=payload.get("selection_id"),
+        strokes=payload.get("strokes", []),
+        png_base64=payload.get("png_base64"),
+        recognized_text=payload.get("recognized_text", ""),
+        page_context=payload.get("page_context", ""),
+    )
+    result = await run_ai(request)
+    return BoardMessage(
+        type="ai_response",
+        session_id=message.session_id,
+        page_id=message.page_id,
+        client_id="backend",
+        payload=result.model_dump(),
+    )
 
 async def broadcast(session_id: str, data: dict, sender: WebSocket | None = None) -> None:
     dead: list[WebSocket] = []
@@ -83,5 +111,19 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str) -> None:
             await store.append(message)
             await websocket.send_json({"type": "ack", "session_id": session_id, "payload": {"timestamp": message.timestamp, "stroke_id": message.stroke_id}})
             await broadcast(session_id, message.model_dump(), sender=websocket)
+            if message.type == "ai_request":
+                try:
+                    response_message = await handle_ai_request(message)
+                    await store.append(response_message)
+                    await websocket.send_json(response_message.model_dump())
+                    await broadcast(session_id, response_message.model_dump(), sender=websocket)
+                except Exception as exc:
+                    await websocket.send_json({
+                        "type": "command",
+                        "session_id": session_id,
+                        "client_id": "backend",
+                        "page_id": message.page_id,
+                        "payload": {"error": f"Tutor_materias/Ollama no respondió: {exc}"},
+                    })
     except WebSocketDisconnect:
         clients.get(session_id, set()).discard(websocket)

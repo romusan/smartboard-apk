@@ -48,7 +48,7 @@ http://192.168.1.10:8000
 - `POST /sessions`: crea una sesión.
 - `GET /sessions/{session_id}`: devuelve historial JSONL almacenado.
 - `WS /ws/{session_id}`: sincronización bidireccional de trazos y comandos.
-- `POST /ai/query`: consulta Ollama y emite `ai_response` a todos los clientes conectados.
+- `POST /ai/query`: consulta `Tutor_materias`/Ollama y emite `ai_response` a todos los clientes conectados.
 
 ## Mensaje JSON de trazo
 
@@ -79,6 +79,10 @@ http://192.168.1.10:8000
 Las coordenadas `x/y` están normalizadas entre `0` y `1`, por eso el visor reconstruye el dibujo en cualquier resolución.
 
 ## Consulta IA
+
+En Android, el botón `Consultar IA` usa ML Kit Digital Ink para convertir los trazos manuscritos
+en `recognized_text` antes de enviar la consulta. La primera vez la tableta puede requerir internet
+para descargar el modelo de escritura en español.
 
 Ejemplo `POST /ai/query`:
 
@@ -116,7 +120,8 @@ La respuesta puede ser `text`, `latex`, `svg`, `image`, `threejs` u `openscad`. 
 - JSON vectorial con coordenadas normalizadas, grosor, color, presión, tiempo, id y acción.
 - Visor web que reconstruye la pizarra desde trazos.
 - Backend FastAPI con sesiones persistidas en JSONL.
-- Consulta a Ollama local y devolución de respuesta a todos los clientes.
+- Reconocimiento manuscrito en la APK con ML Kit Digital Ink.
+- Consulta a `Tutor_materias` sobre los materiales del curso vía Ollama local.
 - Entidades Room preparadas para cola/proyectos persistentes.
 - Exportación PNG desde el visor web.
 - GitHub Actions para pruebas y APK debug.
@@ -125,7 +130,6 @@ La respuesta puede ser `text`, `latex`, `svg`, `image`, `threejs` u `openscad`. 
 
 - Persistir la cola local realmente en Room mediante DAO y migraciones.
 - Exportar PDF/JSON desde la APK, además del visor.
-- OCR local o ML Kit para `recognized_text`.
 - Inserción visual editable de respuestas IA en el lienzo Android.
 - Código QR real para descubrimiento del servidor.
 - Conflictos avanzados tipo CRDT; por ahora se ordena por `timestamp` y se conserva historial.
