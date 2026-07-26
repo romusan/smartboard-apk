@@ -11,6 +11,9 @@ on:
       - '.github/workflows/smartboard.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   backend-tests:
     runs-on: ubuntu-latest
@@ -44,6 +47,17 @@ jobs:
         with:
           gradle-version: 8.10.2
       - run: gradle testDebugUnitTest assembleDebug
+      - name: Publish latest debug APK
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: .
+        run: |
+          mkdir -p smartboard/dist
+          cp smartboard/android/app/build/outputs/apk/debug/app-debug.apk smartboard/dist/app-debug-latest.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add smartboard/dist/app-debug-latest.apk
+          git diff --cached --quiet || git commit -m "Update latest debug APK [skip ci]"
+          git push
       - uses: actions/upload-artifact@v4
         with:
           name: smartboard-debug-apk
