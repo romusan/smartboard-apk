@@ -15,6 +15,7 @@ from .atomic_cards import generate_atom_structure_card, generate_quantum_numbers
 from .bcc_card import generate_bcc_card, generate_bcc_3d_html
 from .fcc_card import generate_fcc_card, generate_fcc_3d_html
 from .miller_card import generate_miller_card
+from .sc_card import generate_sc_card, generate_sc_3d_html
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
@@ -295,6 +296,18 @@ def _detect_fcc(text: str) -> bool:
     return "fcc" in compact or "fce" in compact or "fec" in compact or "cubicacentradaenlascaras" in compact
 
 
+def _detect_sc(text: str) -> bool:
+    plain = _plain(text)
+    compact = re.sub(r"[^a-z0-9]", "", plain)
+    return (
+        compact in {"sc", "scc"}
+        or " sc " in f" {plain} "
+        or "cubicasimple" in compact
+        or "simplecubic" in compact
+        or "estructurasc" in compact
+    )
+
+
 def _detect_atom_structure(text: str) -> bool:
     plain = _plain(text)
     compact = re.sub(r"[^a-z0-9]", "", plain)
@@ -427,6 +440,30 @@ def _fcc_card_response(request: AiRequest, corrected_text: str, corrections: lis
     )
 
 
+def _sc_card_response(request: AiRequest, corrected_text: str, corrections: list[dict[str, str]], question: str) -> AiResponse | None:
+    if not (_detect_sc(corrected_text) or _detect_sc(request.recognized_text)):
+        return None
+    image_path = generate_sc_card(GENERATED_DIR)
+    html_path = generate_sc_3d_html(GENERATED_DIR)
+    image_url = f"/generated/{image_path.name}"
+    return AiResponse(
+        kind="image",
+        content="Tarjeta didactica generada para estructura cubica simple SC. Vista 3D interactiva disponible en el computador.",
+        metadata={
+            "provider": "Tutor_materias",
+            "model": "python-sc-card",
+            "question": question,
+            "recognized_text_original": request.recognized_text,
+            "recognized_text_corrected": corrected_text,
+            "ocr_corrections": corrections,
+            "crystal_structure": "sc",
+            "image_url": image_url,
+            "html_3d_url": f"/generated/{html_path.name}",
+            "supervisor": "not_required_for_generated_diagram",
+        },
+    )
+
+
 def _supervise_answer(answer: str, question: str) -> tuple[str, dict[str, str]]:
     if not SMARTBOARD_GEMINI_SUPERVISION:
         return answer, {"supervisor": "disabled"}
@@ -490,6 +527,9 @@ def _ask_tutor_sync(request: AiRequest) -> AiResponse:
     fcc_card = _fcc_card_response(request, corrected_text, corrections, question)
     if fcc_card is not None:
         return fcc_card
+    sc_card = _sc_card_response(request, corrected_text, corrections, question)
+    if sc_card is not None:
+        return sc_card
     plane_card = _miller_plane_card_response(request, corrected_text, corrections, question)
     if plane_card is not None:
         return plane_card
