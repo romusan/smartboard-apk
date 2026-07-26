@@ -176,6 +176,20 @@ Los recíprocos son 1, 1, 0, por eso el plano es (110).
 
 def _detect_miller_plane(text: str) -> tuple[int, int, int] | None:
     plain = _plain(text)
+    keyword_match = re.search(r"\b(?:plano|planos|miller|hkl)\b(.{0,20})", plain)
+    if keyword_match:
+        digit_tail = (
+            keyword_match.group(1)
+            .replace("|", "1")
+            .replace("i", "1")
+            .replace("l", "1")
+            .replace("o", "0")
+            .replace("z", "2")
+            .replace("s", "5")
+        )
+        compact = re.sub(r"[^0-9]", "", digit_tail)
+        if len(compact) >= 3:
+            return tuple(int(value) for value in compact[:3])
     patterns = (
         r"\b(?:plano|planos|miller|hkl)\s*\(?\s*([0-9])\s*[,;\-\s]\s*([0-9])\s*[,;\-\s]\s*([0-9])\s*\)?",
         r"\b(?:plano|planos|miller|hkl)\s*\(?\s*([0-9])\s*([0-9])\s*([0-9])\s*\)?",
@@ -188,8 +202,61 @@ def _detect_miller_plane(text: str) -> tuple[int, int, int] | None:
     return None
 
 
+def _stroke_bounds(stroke) -> tuple[float, float, float, float] | None:
+    points = getattr(stroke, "points", []) or []
+    if not points:
+        return None
+    xs = [point.x for point in points]
+    ys = [point.y for point in points]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _classify_digit_stroke(stroke) -> str | None:
+    bounds = _stroke_bounds(stroke)
+    if bounds is None:
+        return None
+    min_x, min_y, max_x, max_y = bounds
+    width = max(max_x - min_x, 0.001)
+    height = max(max_y - min_y, 0.001)
+    points = getattr(stroke, "points", []) or []
+    if len(points) < 2:
+        return None
+    aspect = width / height
+    start = points[0]
+    end = points[-1]
+    direction_x = end.x - start.x
+    direction_y = end.y - start.y
+    if aspect < 0.35 and height > 0.035:
+        return "1"
+    if aspect > 0.55 and abs(direction_x) > width * 0.35 and direction_y > height * 0.15:
+        return "2"
+    if aspect > 0.45 and abs(direction_x) < width * 0.45 and abs(direction_y) < height * 0.45:
+        return "0"
+    return None
+
+
+def _infer_miller_plane_from_strokes(request: AiRequest) -> tuple[int, int, int] | None:
+    text = _plain(request.recognized_text)
+    if not any(keyword in text for keyword in ("plano", "planos", "miller", "hkl")):
+        return None
+    digits: list[tuple[float, str]] = []
+    for stroke in request.strokes:
+        digit = _classify_digit_stroke(stroke)
+        bounds = _stroke_bounds(stroke)
+        if digit and bounds:
+            digits.append((bounds[0], digit))
+    if len(digits) < 3:
+        return None
+    ordered = [digit for _, digit in sorted(digits, key=lambda item: item[0])[-3:]]
+    return tuple(int(value) for value in ordered)
+
+
 def _miller_plane_card_response(request: AiRequest, corrected_text: str, corrections: list[dict[str, str]], question: str) -> AiResponse | None:
-    plane = _detect_miller_plane(corrected_text) or _detect_miller_plane(request.recognized_text)
+    plane = (
+        _detect_miller_plane(corrected_text)
+        or _detect_miller_plane(request.recognized_text)
+        or _infer_miller_plane_from_strokes(request)
+    )
     if plane is None:
         return None
     h, k, l = plane
