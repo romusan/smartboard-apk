@@ -70,6 +70,7 @@ class BoardViewModel : ViewModel() {
 
     fun clearAiCards() {
         aiCards.clear()
+        send("command", mapOf("action" to "clear_ai_cards"))
     }
 
     fun askAi(action: String, selected: List<Stroke> = strokes.toList()) {

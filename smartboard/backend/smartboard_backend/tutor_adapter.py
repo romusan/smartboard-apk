@@ -11,6 +11,7 @@ import unicodedata
 from pathlib import Path
 
 from .models import AiRequest, AiResponse
+from .bcc_card import generate_bcc_card
 from .miller_card import generate_miller_card
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -280,6 +281,34 @@ def _miller_plane_card_response(request: AiRequest, corrected_text: str, correct
     )
 
 
+def _detect_bcc(text: str) -> bool:
+    plain = _plain(text)
+    compact = re.sub(r"[^a-z0-9]", "", plain)
+    return "bcc" in compact or "bce" in compact or "bec" in compact or "cubicaentradaenelcuerpo" in compact
+
+
+def _bcc_card_response(request: AiRequest, corrected_text: str, corrections: list[dict[str, str]], question: str) -> AiResponse | None:
+    if not (_detect_bcc(corrected_text) or _detect_bcc(request.recognized_text)):
+        return None
+    image_path = generate_bcc_card(GENERATED_DIR)
+    image_url = f"/generated/{image_path.name}"
+    return AiResponse(
+        kind="image",
+        content="Tarjeta didáctica generada para estructura BCC.",
+        metadata={
+            "provider": "Tutor_materias",
+            "model": "python-bcc-card",
+            "question": question,
+            "recognized_text_original": request.recognized_text,
+            "recognized_text_corrected": corrected_text,
+            "ocr_corrections": corrections,
+            "crystal_structure": "bcc",
+            "image_url": image_url,
+            "supervisor": "not_required_for_generated_diagram",
+        },
+    )
+
+
 def _supervise_answer(answer: str, question: str) -> tuple[str, dict[str, str]]:
     if not SMARTBOARD_GEMINI_SUPERVISION:
         return answer, {"supervisor": "disabled"}
@@ -331,6 +360,9 @@ incierta ni extensa.
 def _ask_tutor_sync(request: AiRequest) -> AiResponse:
     corrected_text, corrections = autocorrect_materials_text(request.recognized_text)
     question = _build_question(request)
+    bcc_card = _bcc_card_response(request, corrected_text, corrections, question)
+    if bcc_card is not None:
+        return bcc_card
     plane_card = _miller_plane_card_response(request, corrected_text, corrections, question)
     if plane_card is not None:
         return plane_card

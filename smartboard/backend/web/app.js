@@ -157,6 +157,11 @@ function applyMessage(msg) {
     });
     render();
   }
+  if (msg.type === 'command' && payload.action === 'clear_ai_cards') {
+    aiCards.length = 0;
+    aiEl.textContent = '';
+    render();
+  }
 }
 
 async function refreshHistory() {
