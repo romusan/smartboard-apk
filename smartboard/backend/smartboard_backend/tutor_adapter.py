@@ -176,10 +176,16 @@ Los recíprocos son 1, 1, 0, por eso el plano es (110).
 
 def _detect_miller_plane(text: str) -> tuple[int, int, int] | None:
     plain = _plain(text)
-    match = re.search(r"\b(?:plano|planos|miller)\s*\(?\s*([0-9])\s*([0-9])\s*([0-9])\s*\)?", plain)
-    if not match:
-        return None
-    return tuple(int(value) for value in match.groups())
+    patterns = (
+        r"\b(?:plano|planos|miller|hkl)\s*\(?\s*([0-9])\s*[,;\-\s]\s*([0-9])\s*[,;\-\s]\s*([0-9])\s*\)?",
+        r"\b(?:plano|planos|miller|hkl)\s*\(?\s*([0-9])\s*([0-9])\s*([0-9])\s*\)?",
+        r"\(([0-9])\s*[,;\-\s]?\s*([0-9])\s*[,;\-\s]?\s*([0-9])\)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, plain)
+        if match:
+            return tuple(int(value) for value in match.groups())
+    return None
 
 
 def _miller_plane_card_response(request: AiRequest, corrected_text: str, corrections: list[dict[str, str]], question: str) -> AiResponse | None:
