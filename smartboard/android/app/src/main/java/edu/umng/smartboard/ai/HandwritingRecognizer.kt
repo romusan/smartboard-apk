@@ -3,12 +3,12 @@ package edu.umng.smartboard.ai
 import com.google.android.gms.tasks.Task
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.common.model.RemoteModelManager
-import com.google.mlkit.vision.digitalink.DigitalInk
 import com.google.mlkit.vision.digitalink.DigitalInkRecognition
 import com.google.mlkit.vision.digitalink.DigitalInkRecognitionModel
 import com.google.mlkit.vision.digitalink.DigitalInkRecognitionModelIdentifier
 import com.google.mlkit.vision.digitalink.DigitalInkRecognizer
 import com.google.mlkit.vision.digitalink.DigitalInkRecognizerOptions
+import com.google.mlkit.vision.digitalink.Ink
 import edu.umng.smartboard.model.Stroke
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -33,7 +33,7 @@ class HandwritingRecognizer(languageTag: String = "es") {
     suspend fun recognize(strokes: List<Stroke>): String = withContext(Dispatchers.IO) {
         if (strokes.isEmpty()) return@withContext ""
         ensureModelDownloaded()
-        val ink = strokes.toDigitalInk()
+        val ink = strokes.toInk()
         val result = recognizer.recognize(ink).await()
         result.candidates.firstOrNull()?.text.orEmpty()
     }
@@ -46,13 +46,13 @@ class HandwritingRecognizer(languageTag: String = "es") {
         }
     }
 
-    private fun List<Stroke>.toDigitalInk(): DigitalInk {
-        val inkBuilder = DigitalInk.builder()
+    private fun List<Stroke>.toInk(): Ink {
+        val inkBuilder = Ink.builder()
         forEach { boardStroke ->
-            val strokeBuilder = DigitalInk.Stroke.builder()
+            val strokeBuilder = Ink.Stroke.builder()
             boardStroke.points.forEach { point ->
                 strokeBuilder.addPoint(
-                    DigitalInk.Point.create(
+                    Ink.Point.create(
                         point.x * CANVAS_SCALE,
                         point.y * CANVAS_SCALE,
                         point.t
