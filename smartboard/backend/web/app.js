@@ -157,7 +157,10 @@ function applyMessage(msg) {
     });
     render();
   }
-  if (msg.type === 'command' && payload.action === 'clear_ai_cards') {
+  if (
+    msg.type === 'command' &&
+    ['clear_ai_cards', 'clear_ai_card', 'clear_ai', 'delete_ai_cards'].includes(payload.action)
+  ) {
     aiCards.length = 0;
     aiEl.textContent = '';
     render();

@@ -38,7 +38,7 @@ def _sphere(draw: ImageDraw.ImageDraw, center: tuple[int, int], radius: int, fil
 
 def generate_bcc_card(output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    digest = hashlib.sha1(b"bcc-body-centered-cubic").hexdigest()[:10]
+    digest = hashlib.sha1(b"bcc-body-centered-cubic-equal-radius-v2").hexdigest()[:10]
     path = output_dir / f"bcc_structure_{digest}.png"
     if path.is_file():
         return path
@@ -69,13 +69,14 @@ def generate_bcc_card(output_dir: Path) -> Path:
 
     far_corners = ["010", "001", "011", "111"]
     near_corners = ["000", "100", "110", "101"]
+    atom_radius = 48
     for name in far_corners:
-        _sphere(draw, _project(vertices[name], origin, scale), 31, "#ddd6fe", "#7c3aed", "1/8")
-    _sphere(draw, _project((0.5, 0.5, 0.5), origin, scale), 52, "#fbbf24", "#b45309", "1")
+        _sphere(draw, _project(vertices[name], origin, scale), atom_radius, "#ddd6fe", "#7c3aed", "1/8")
+    _sphere(draw, _project((0.5, 0.5, 0.5), origin, scale), atom_radius, "#fbbf24", "#b45309", "1")
     for start, end in edges:
         draw.line((*_project(vertices[start], origin, scale), *_project(vertices[end], origin, scale)), fill="#334155", width=4)
     for name in near_corners:
-        _sphere(draw, _project(vertices[name], origin, scale), 31, "#ddd6fe", "#7c3aed", "1/8")
+        _sphere(draw, _project(vertices[name], origin, scale), atom_radius, "#ddd6fe", "#7c3aed", "1/8")
 
     box_x = 670
     draw.rounded_rectangle((box_x, 170, 1038, 605), radius=24, fill="#f5f3ff", outline="#c4b5fd", width=3)
@@ -87,6 +88,9 @@ def generate_bcc_card(output_dir: Path) -> Path:
         "",
         "Átomos por celda:",
         "8 × 1/8 + 1 = 2",
+        "",
+        "Relación geométrica:",
+        "4r = √3 a  →  r = √3a/4",
         "",
         "Coordinación:",
         "cada átomo toca 8 vecinos."
