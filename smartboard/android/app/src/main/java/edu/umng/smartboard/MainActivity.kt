@@ -41,6 +41,7 @@ fun SmartBoardApp(vm: BoardViewModel) {
     var color by remember { mutableStateOf("#111111") }
     var width by remember { mutableStateOf(4f) }
     var lasso by remember { mutableStateOf(false) }
+    var showOutlineMenu by remember { mutableStateOf(false) }
     val connected by vm.socket.connected.collectAsState()
 
     MaterialTheme {
@@ -55,7 +56,12 @@ fun SmartBoardApp(vm: BoardViewModel) {
                 AssistChip(onClick = { lasso = !lasso }, label = { Text(if (lasso) "Lazo activo" else "Lazo") })
             }
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
-                items(AiActions.size) { index -> Button(onClick = { vm.askAi(AiActions[index].second) }) { Text(AiActions[index].first) } }
+                items(AiActions.size) { index ->
+                    val item = AiActions[index]
+                    Button(onClick = {
+                        if (item.second == "outline") showOutlineMenu = true else vm.askAi(item.second)
+                    }) { Text(item.first) }
+                }
             }
             val aiStatus by vm.aiStatus
             val recognizedText by vm.recognizedText
@@ -67,6 +73,32 @@ fun SmartBoardApp(vm: BoardViewModel) {
                 )
             }
             BoardCanvas(vm, color, width, lasso, Modifier.fillMaxSize())
+        }
+        if (showOutlineMenu) {
+            AlertDialog(
+                onDismissRequest = { showOutlineMenu = false },
+                title = { Text("Crear esquema") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Dibujos y tarjetas paramétricas")
+                        Button(onClick = { vm.requestCard("atom_structure"); showOutlineMenu = false }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Estructura del átomo")
+                        }
+                        Button(onClick = { vm.requestCard("quantum_numbers"); showOutlineMenu = false }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Números cuánticos / niveles")
+                        }
+                        Button(onClick = { vm.requestCard("bcc"); showOutlineMenu = false }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Estructura BCC")
+                        }
+                        Button(onClick = { vm.requestCard("fcc"); showOutlineMenu = false }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Estructura FCC")
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showOutlineMenu = false }) { Text("Cerrar") }
+                }
+            )
         }
     }
 }

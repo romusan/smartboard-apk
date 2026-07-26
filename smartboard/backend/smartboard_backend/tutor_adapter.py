@@ -11,6 +11,7 @@ import unicodedata
 from pathlib import Path
 
 from .models import AiRequest, AiResponse
+from .atomic_cards import generate_atom_structure_card, generate_quantum_numbers_card
 from .bcc_card import generate_bcc_card
 from .fcc_card import generate_fcc_card
 from .miller_card import generate_miller_card
@@ -294,6 +295,90 @@ def _detect_fcc(text: str) -> bool:
     return "fcc" in compact or "fce" in compact or "fec" in compact or "cubicacentradaenlascaras" in compact
 
 
+def _detect_atom_structure(text: str) -> bool:
+    plain = _plain(text)
+    compact = re.sub(r"[^a-z0-9]", "", plain)
+    return (
+        "atomo" in plain
+        or "atomica" in plain
+        or "atomic" in compact
+        or "atomstructure" in compact
+        or "estructuraatom" in compact
+    )
+
+
+def _detect_quantum_numbers(text: str) -> bool:
+    plain = _plain(text)
+    compact = re.sub(r"[^a-z0-9]", "", plain)
+    return (
+        "numero cuantico" in plain
+        or "numeros cuanticos" in plain
+        or "cuantico" in plain
+        or "niveles de energia" in plain
+        or "quantum" in compact
+    )
+
+
+def _image_response(
+    *,
+    request: AiRequest,
+    corrected_text: str,
+    corrections: list[dict[str, str]],
+    question: str,
+    image_path: Path,
+    content: str,
+    model: str,
+    metadata: dict,
+) -> AiResponse:
+    return AiResponse(
+        kind="image",
+        content=content,
+        metadata={
+            "provider": "Tutor_materias",
+            "model": model,
+            "question": question,
+            "recognized_text_original": request.recognized_text,
+            "recognized_text_corrected": corrected_text,
+            "ocr_corrections": corrections,
+            "image_url": f"/generated/{image_path.name}",
+            "supervisor": "not_required_for_generated_diagram",
+            **metadata,
+        },
+    )
+
+
+def _atom_card_response(request: AiRequest, corrected_text: str, corrections: list[dict[str, str]], question: str) -> AiResponse | None:
+    if not (_detect_atom_structure(corrected_text) or _detect_atom_structure(request.recognized_text)):
+        return None
+    image_path = generate_atom_structure_card(GENERATED_DIR)
+    return _image_response(
+        request=request,
+        corrected_text=corrected_text,
+        corrections=corrections,
+        question=question,
+        image_path=image_path,
+        content="Tarjeta didáctica generada para estructura del átomo.",
+        model="python-atom-structure-card",
+        metadata={"card_type": "atom_structure"},
+    )
+
+
+def _quantum_card_response(request: AiRequest, corrected_text: str, corrections: list[dict[str, str]], question: str) -> AiResponse | None:
+    if not (_detect_quantum_numbers(corrected_text) or _detect_quantum_numbers(request.recognized_text)):
+        return None
+    image_path = generate_quantum_numbers_card(GENERATED_DIR)
+    return _image_response(
+        request=request,
+        corrected_text=corrected_text,
+        corrections=corrections,
+        question=question,
+        image_path=image_path,
+        content="Tarjeta didáctica generada para números cuánticos y niveles de energía.",
+        model="python-quantum-numbers-card",
+        metadata={"card_type": "quantum_numbers"},
+    )
+
+
 def _bcc_card_response(request: AiRequest, corrected_text: str, corrections: list[dict[str, str]], question: str) -> AiResponse | None:
     if not (_detect_bcc(corrected_text) or _detect_bcc(request.recognized_text)):
         return None
@@ -389,6 +474,12 @@ incierta ni extensa.
 def _ask_tutor_sync(request: AiRequest) -> AiResponse:
     corrected_text, corrections = autocorrect_materials_text(request.recognized_text)
     question = _build_question(request)
+    atom_card = _atom_card_response(request, corrected_text, corrections, question)
+    if atom_card is not None:
+        return atom_card
+    quantum_card = _quantum_card_response(request, corrected_text, corrections, question)
+    if quantum_card is not None:
+        return quantum_card
     bcc_card = _bcc_card_response(request, corrected_text, corrections, question)
     if bcc_card is not None:
         return bcc_card

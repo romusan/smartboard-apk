@@ -98,6 +98,19 @@ class BoardViewModel : ViewModel() {
         }
     }
 
+    fun requestCard(cardType: String) {
+        aiStatus.value = "Generando tarjeta..."
+        send(
+            "ai_request",
+            mapOf(
+                "action" to "outline",
+                "card_type" to cardType,
+                "recognized_text" to cardType.replace("_", " "),
+                "page_context" to "Tarjeta paramétrica solicitada desde Crear esquema"
+            )
+        )
+    }
+
     fun sendStroke(type: String, stroke: Stroke) = send(type, mapOf("stroke" to stroke), stroke.id)
 
     private fun send(type: String, payload: Map<String, Any?>, strokeId: String? = null) {
