@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.gson.Gson
 import edu.umng.smartboard.ai.HandwritingRecognizer
 import edu.umng.smartboard.model.AiBoardCard
 import edu.umng.smartboard.model.BoardMessage
@@ -29,6 +30,7 @@ class BoardViewModel : ViewModel() {
     val backgroundImage = mutableStateOf<ImageBitmap?>(null)
     val documentStatus = mutableStateOf("")
     var sessionId = "demo"
+    private val gson = Gson()
     private val handwritingRecognizer = HandwritingRecognizer()
     private var documentPages: List<Map<String, Any?>> = emptyList()
     private var currentPageIndex = 0
@@ -36,25 +38,7 @@ class BoardViewModel : ViewModel() {
     init {
         viewModelScope.launch {
             socket.incoming.collect { message ->
-                if (message.type == "ai_response") {
-                    val content = message.payload["content"]?.toString().orEmpty()
-                    val kind = message.payload["kind"]?.toString() ?: "text"
-                    if (content.isNotBlank()) {
-                        aiCards.clear()
-                        aiCards.add(AiBoardCard(kind = kind, content = content))
-                        aiStatus.value = "Respuesta IA recibida."
-                    }
-                }
-                if (message.type == "command") {
-                    message.payload["error"]?.toString()?.let { aiStatus.value = it }
-                }
-                if (message.type == "object_update" && message.payload["action"] == "document_set") {
-                    handleDocumentSet(message.payload["document"])
-                }
-                if (message.type == "page_select") {
-                    val index = (message.payload["page_index"] as? Number)?.toInt() ?: currentPageIndex
-                    selectDocumentPage(index)
-                }
+                applyMessage(message)
             }
         }
     }
@@ -161,6 +145,50 @@ class BoardViewModel : ViewModel() {
     }
 
     fun strokeFromPoints(points: List<BoardPoint>, color: String, width: Float) = Stroke(color = color, width = width, points = points)
+
+    private fun applyMessage(message: BoardMessage) {
+        if (message.type == "sync_state") {
+            val history = message.payload["history"] as? List<*> ?: return
+            strokes.clear()
+            aiCards.clear()
+            history.forEach { raw ->
+                val nested = runCatching {
+                    gson.fromJson(gson.toJson(raw), BoardMessage::class.java)
+                }.getOrNull()
+                if (nested != null) applyMessage(nested)
+            }
+            return
+        }
+        if (message.type == "ai_response") {
+            val content = message.payload["content"]?.toString().orEmpty()
+            val kind = message.payload["kind"]?.toString() ?: "text"
+            if (content.isNotBlank()) {
+                aiCards.clear()
+                aiCards.add(AiBoardCard(kind = kind, content = content))
+                aiStatus.value = "Respuesta IA recibida."
+            }
+        }
+        if (message.type == "command") {
+            message.payload["error"]?.toString()?.let { aiStatus.value = it }
+        }
+        if (message.type == "object_update" && message.payload["action"] == "document_set") {
+            handleDocumentSet(message.payload["document"])
+        }
+        if (message.type == "page_select") {
+            val index = (message.payload["page_index"] as? Number)?.toInt() ?: currentPageIndex
+            selectDocumentPage(index)
+        }
+        if (message.type == "stroke_end" || message.type == "stroke_update" || message.type == "stroke_start") {
+            val rawStroke = message.payload["stroke"] ?: return
+            val stroke = runCatching { gson.fromJson(gson.toJson(rawStroke), Stroke::class.java) }.getOrNull() ?: return
+            val index = strokes.indexOfFirst { it.id == stroke.id }
+            if (index >= 0) strokes[index] = stroke else strokes.add(stroke)
+        }
+        if (message.type == "erase") {
+            val strokeIds = message.payload["stroke_ids"] as? List<*> ?: return
+            strokes.removeAll { stroke -> strokeIds.any { it?.toString() == stroke.id } }
+        }
+    }
 
     @Suppress("UNCHECKED_CAST")
     private fun handleDocumentSet(rawDocument: Any?) {
