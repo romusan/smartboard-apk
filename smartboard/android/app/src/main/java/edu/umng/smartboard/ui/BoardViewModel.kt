@@ -125,6 +125,20 @@ class BoardViewModel : ViewModel() {
         )
     }
 
+    fun requestElementEnergy(element: String) {
+        val cleanElement = element.filter { it.isLetter() }.take(2).ifBlank { "Fe" }
+        aiStatus.value = "Generando configuración electrónica de $cleanElement..."
+        send(
+            "ai_request",
+            mapOf(
+                "action" to "outline",
+                "card_type" to "element_energy",
+                "recognized_text" to "elemento $cleanElement configuracion electronica niveles energeticos",
+                "page_context" to "Tarjeta de configuracion electronica por elemento solicitada desde Crear esquema: $cleanElement"
+            )
+        )
+    }
+
     fun sendStroke(type: String, stroke: Stroke) = send(type, mapOf("stroke" to stroke), stroke.id)
 
     private fun send(type: String, payload: Map<String, Any?>, strokeId: String? = null) {

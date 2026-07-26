@@ -43,6 +43,7 @@ fun SmartBoardApp(vm: BoardViewModel) {
     var lasso by remember { mutableStateOf(false) }
     var showOutlineMenu by remember { mutableStateOf(false) }
     var millerPlane by remember { mutableStateOf("112") }
+    var elementSymbol by remember { mutableStateOf("Fe") }
     val connected by vm.socket.connected.collectAsState()
 
     MaterialTheme {
@@ -101,6 +102,20 @@ fun SmartBoardApp(vm: BoardViewModel) {
                         }
                         Button(onClick = { vm.requestCard("quantum_numbers"); showOutlineMenu = false }, modifier = Modifier.fillMaxWidth()) {
                             Text("Números cuánticos / niveles")
+                        }
+                        OutlinedTextField(
+                            value = elementSymbol,
+                            onValueChange = { elementSymbol = it },
+                            label = { Text("Elemento") },
+                            supportingText = { Text("Ejemplo: H, C, Al, Fe, Cu, Kr") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Button(onClick = {
+                            vm.requestElementEnergy(elementSymbol)
+                            showOutlineMenu = false
+                        }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Configuración electrónica por elemento")
                         }
                         Button(onClick = { vm.requestCard("bcc"); showOutlineMenu = false }, modifier = Modifier.fillMaxWidth()) {
                             Text("Estructura BCC")

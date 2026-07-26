@@ -70,6 +70,9 @@ async def handle_ai_request(message: BoardMessage) -> BoardMessage:
     card_type = payload.get("card_type")
     if card_type and not recognized_text:
         recognized_text = str(card_type).replace("_", " ")
+    page_context = payload.get("page_context", "")
+    if card_type:
+        page_context = f"{page_context}\ncard_type: {card_type}".strip()
     request = AiRequest(
         action=payload.get("action", "explain"),
         session_id=message.session_id,
@@ -78,7 +81,7 @@ async def handle_ai_request(message: BoardMessage) -> BoardMessage:
         strokes=payload.get("strokes", []),
         png_base64=payload.get("png_base64"),
         recognized_text=recognized_text,
-        page_context=payload.get("page_context", ""),
+        page_context=page_context,
     )
     result = await run_ai(request)
     return BoardMessage(

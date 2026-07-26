@@ -13,6 +13,7 @@ from pathlib import Path
 from .models import AiRequest, AiResponse
 from .atomic_cards import generate_atom_structure_card, generate_quantum_numbers_card
 from .bcc_card import generate_bcc_card, generate_bcc_3d_html
+from .element_cards import generate_element_energy_card, normalize_element_symbol
 from .fcc_card import generate_fcc_card, generate_fcc_3d_html
 from .miller_card import generate_miller_card
 from .sc_card import generate_sc_card, generate_sc_3d_html
@@ -392,6 +393,39 @@ def _quantum_card_response(request: AiRequest, corrected_text: str, corrections:
     )
 
 
+def _element_energy_card_response(request: AiRequest, corrected_text: str, corrections: list[dict[str, str]], question: str) -> AiResponse | None:
+    payload_text = " ".join(
+        str(value)
+        for value in (
+            corrected_text,
+            request.recognized_text,
+            request.page_context,
+        )
+        if value
+    )
+    wants_element = (
+        "element" in payload_text.lower()
+        or "card_type: element_energy" in payload_text.lower()
+        or "configuracion" in _plain(payload_text)
+        or "electron" in _plain(payload_text)
+        or "niveles" in _plain(payload_text)
+    )
+    symbol = normalize_element_symbol(payload_text)
+    if symbol is None or not wants_element:
+        return None
+    image_path = generate_element_energy_card(GENERATED_DIR, symbol)
+    return _image_response(
+        request=request,
+        corrected_text=corrected_text,
+        corrections=corrections,
+        question=question,
+        image_path=image_path,
+        content=f"Tarjeta didactica generada para configuracion electronica de {symbol}.",
+        model="python-element-energy-card",
+        metadata={"card_type": "element_energy", "element_symbol": symbol},
+    )
+
+
 def _bcc_card_response(request: AiRequest, corrected_text: str, corrections: list[dict[str, str]], question: str) -> AiResponse | None:
     if not (_detect_bcc(corrected_text) or _detect_bcc(request.recognized_text)):
         return None
@@ -521,6 +555,9 @@ def _ask_tutor_sync(request: AiRequest) -> AiResponse:
     quantum_card = _quantum_card_response(request, corrected_text, corrections, question)
     if quantum_card is not None:
         return quantum_card
+    element_card = _element_energy_card_response(request, corrected_text, corrections, question)
+    if element_card is not None:
+        return element_card
     bcc_card = _bcc_card_response(request, corrected_text, corrections, question)
     if bcc_card is not None:
         return bcc_card
