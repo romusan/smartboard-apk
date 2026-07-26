@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+from urllib import parse, request as urlrequest
 import re
 import sys
 import threading
@@ -9,6 +11,7 @@ import unicodedata
 from pathlib import Path
 
 from .models import AiRequest, AiResponse
+from .miller_card import generate_miller_card
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
@@ -18,6 +21,8 @@ _components: tuple[dict, object] | None = None
 _components_lock = threading.Lock()
 SMARTBOARD_AI_TIMEOUT = int(os.getenv("SMARTBOARD_AI_TIMEOUT", "75"))
 SMARTBOARD_GEMINI_SUPERVISION = os.getenv("SMARTBOARD_GEMINI_SUPERVISION", "true").strip().lower() in {"1", "true", "yes", "si", "sí"}
+SMARTBOARD_GEMINI_TIMEOUT = int(os.getenv("SMARTBOARD_GEMINI_TIMEOUT", "8"))
+GENERATED_DIR = Path(os.getenv("SMARTBOARD_GENERATED_DIR", Path(__file__).resolve().parent.parent / "generated"))
 
 ACTION_PROMPTS = {
     "explain": "Explica de forma clara y breve el contenido seleccionado.",
@@ -169,12 +174,44 @@ Los recíprocos son 1, 1, 0, por eso el plano es (110).
 """.strip()
 
 
+def _detect_miller_plane(text: str) -> tuple[int, int, int] | None:
+    plain = _plain(text)
+    match = re.search(r"\b(?:plano|planos|miller)\s*\(?\s*([0-9])\s*([0-9])\s*([0-9])\s*\)?", plain)
+    if not match:
+        return None
+    return tuple(int(value) for value in match.groups())
+
+
+def _miller_plane_card_response(request: AiRequest, corrected_text: str, corrections: list[dict[str, str]], question: str) -> AiResponse | None:
+    plane = _detect_miller_plane(corrected_text) or _detect_miller_plane(request.recognized_text)
+    if plane is None:
+        return None
+    h, k, l = plane
+    image_path = generate_miller_card(GENERATED_DIR, h, k, l)
+    image_url = f"/generated/{image_path.name}"
+    content = f"Tarjeta didáctica generada para el plano de Miller ({h}{k}{l})."
+    return AiResponse(
+        kind="image",
+        content=content,
+        metadata={
+            "provider": "Tutor_materias",
+            "model": "python-miller-card",
+            "question": question,
+            "recognized_text_original": request.recognized_text,
+            "recognized_text_corrected": corrected_text,
+            "ocr_corrections": corrections,
+            "miller_plane": {"h": h, "k": k, "l": l},
+            "image_url": image_url,
+            "supervisor": "not_required_for_generated_diagram",
+        },
+    )
+
+
 def _supervise_answer(answer: str, question: str) -> tuple[str, dict[str, str]]:
     if not SMARTBOARD_GEMINI_SUPERVISION:
         return answer, {"supervisor": "disabled"}
     try:
         from app.bot import config
-        from app.gemini import Gemini
 
         cfg = config()
         if not cfg.get("gemini_api_key"):
@@ -191,15 +228,29 @@ Verifica si la respuesta es correcta, clara y didáctica. Si está bien, reescr�
 en formato breve para pizarra. Si tiene errores, corrígela. No agregues información
 incierta ni extensa.
 """.strip()
-        supervised = Gemini(cfg["gemini_api_key"]).chat(
-            cfg.get("backup_chat_model", "gemini-3.5-flash"),
-            [
-                {"role": "system", "content": "Eres un revisor académico cuidadoso y conciso."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.1,
+        model = cfg.get("backup_chat_model", "gemini-3.5-flash")
+        payload = {
+            "systemInstruction": {
+                "parts": [{"text": "Eres un revisor académico cuidadoso y conciso."}]
+            },
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.1},
+        }
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{parse.quote(model, safe='')}:generateContent"
+        gemini_request = urlrequest.Request(
+            url,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": cfg["gemini_api_key"],
+            },
+            method="POST",
         )
-        return supervised, {"supervisor": "gemini", "supervisor_model": cfg.get("backup_chat_model", "gemini-3.5-flash")}
+        with urlrequest.urlopen(gemini_request, timeout=SMARTBOARD_GEMINI_TIMEOUT) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        parts = (((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [])
+        supervised = "".join(str(part.get("text", "")) for part in parts).strip()
+        return supervised or answer, {"supervisor": "gemini", "supervisor_model": model}
     except Exception as exc:
         return answer, {"supervisor": "failed", "supervisor_error": str(exc)}
 
@@ -207,6 +258,9 @@ incierta ni extensa.
 def _ask_tutor_sync(request: AiRequest) -> AiResponse:
     corrected_text, corrections = autocorrect_materials_text(request.recognized_text)
     question = _build_question(request)
+    plane_card = _miller_plane_card_response(request, corrected_text, corrections, question)
+    if plane_card is not None:
+        return plane_card
     quick_answer = _quick_materials_answer(corrected_text)
     if quick_answer is not None:
         supervised_answer, supervisor_metadata = _supervise_answer(quick_answer, question)

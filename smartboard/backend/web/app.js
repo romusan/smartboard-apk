@@ -5,6 +5,8 @@ const sessionEl = document.getElementById('session');
 const aiEl = document.getElementById('ai');
 let ws = null;
 const strokes = new Map();
+const aiCards = [];
+const imageCache = new Map();
 const pending = [];
 
 function resize() {
@@ -19,10 +21,12 @@ setTimeout(resize, 0);
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   for (const stroke of strokes.values()) drawStroke(stroke);
+  for (const card of aiCards) drawAiCard(card);
 }
 
 function resetBoard() {
   strokes.clear();
+  aiCards.length = 0;
   aiEl.textContent = '';
   render();
 }
@@ -41,6 +45,85 @@ function drawStroke(stroke) {
     if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
   });
   ctx.stroke();
+  ctx.restore();
+}
+
+function drawWrappedText(text, x, y, maxWidth, lineHeight, maxLines) {
+  const words = String(text || '').replace(/\s+/g, ' ').trim().split(' ');
+  let line = '';
+  let lines = 0;
+  for (const word of words) {
+    const testLine = line ? `${line} ${word}` : word;
+    if (ctx.measureText(testLine).width > maxWidth && line) {
+      ctx.fillText(line, x, y);
+      y += lineHeight;
+      lines += 1;
+      line = word;
+      if (lines >= maxLines - 1) break;
+    } else {
+      line = testLine;
+    }
+  }
+  if (line && lines < maxLines) ctx.fillText(line, x, y);
+}
+
+function drawAiCard(card) {
+  if (card.kind === 'image' && card.image_url) {
+    drawImageCard(card);
+    return;
+  }
+  const margin = 18 * devicePixelRatio;
+  const width = Math.min(canvas.width * 0.42, 460 * devicePixelRatio);
+  const x = canvas.width - width - margin;
+  const y = margin;
+  const padding = 14 * devicePixelRatio;
+  const lineHeight = 18 * devicePixelRatio;
+  const height = Math.min(canvas.height * 0.48, 280 * devicePixelRatio);
+  ctx.save();
+  ctx.fillStyle = '#fffbeb';
+  ctx.strokeStyle = '#f59e0b';
+  ctx.lineWidth = 2 * devicePixelRatio;
+  if (ctx.roundRect) {
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, height, 16 * devicePixelRatio);
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    ctx.fillRect(x, y, width, height);
+    ctx.strokeRect(x, y, width, height);
+  }
+  ctx.fillStyle = '#78350f';
+  ctx.font = `${16 * devicePixelRatio}px system-ui, sans-serif`;
+  ctx.fillText('Respuesta IA supervisada', x + padding, y + padding + lineHeight);
+  ctx.fillStyle = '#111827';
+  ctx.font = `${13 * devicePixelRatio}px system-ui, sans-serif`;
+  drawWrappedText(card.content, x + padding, y + padding + lineHeight * 2.3, width - padding * 2, lineHeight, 11);
+  ctx.restore();
+}
+
+function drawImageCard(card) {
+  const image = imageCache.get(card.image_url);
+  if (!image) {
+    const next = new Image();
+    next.onload = render;
+    next.src = card.image_url;
+    imageCache.set(card.image_url, next);
+    return;
+  }
+  if (!image.complete) return;
+  const margin = 18 * devicePixelRatio;
+  const maxWidth = canvas.width * 0.55;
+  const maxHeight = canvas.height * 0.58;
+  const ratio = Math.min(maxWidth / image.naturalWidth, maxHeight / image.naturalHeight);
+  const width = image.naturalWidth * ratio;
+  const height = image.naturalHeight * ratio;
+  const x = canvas.width - width - margin;
+  const y = margin;
+  ctx.save();
+  ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+  ctx.shadowBlur = 18 * devicePixelRatio;
+  ctx.shadowOffsetY = 6 * devicePixelRatio;
+  ctx.drawImage(image, x, y, width, height);
   ctx.restore();
 }
 
@@ -63,7 +146,17 @@ function applyMessage(msg) {
     payload.stroke_ids.forEach(id => strokes.delete(id));
     render();
   }
-  if (msg.type === 'ai_response') aiEl.textContent = `${payload.kind || 'text'}\n\n${payload.content || ''}`;
+  if (msg.type === 'ai_response') {
+    aiEl.textContent = `${payload.kind || 'text'}\n\n${payload.content || ''}`;
+    aiCards.length = 0;
+    aiCards.push({
+      id: `${msg.timestamp || Date.now()}`,
+      kind: payload.kind || 'text',
+      content: payload.content || '',
+      image_url: payload.metadata?.image_url || ''
+    });
+    render();
+  }
 }
 
 async function refreshHistory() {

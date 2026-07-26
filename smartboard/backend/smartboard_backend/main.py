@@ -17,6 +17,7 @@ from .tutor_adapter import query_tutor_materials
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.getenv("SMARTBOARD_DATA", ROOT / "sessions"))
+GENERATED_DIR = Path(os.getenv("SMARTBOARD_GENERATED_DIR", ROOT / "generated"))
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 AI_PROVIDER = os.getenv("SMARTBOARD_AI_PROVIDER", "tutor").strip().lower()
@@ -26,6 +27,8 @@ store = SessionStore(DATA_DIR)
 clients: dict[str, set[WebSocket]] = {}
 
 app.mount("/static", StaticFiles(directory=ROOT / "web"), name="static")
+GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/generated", StaticFiles(directory=GENERATED_DIR), name="generated")
 
 @app.get("/")
 async def index() -> FileResponse:
