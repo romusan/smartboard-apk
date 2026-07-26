@@ -13,7 +13,7 @@ from pathlib import Path
 from .models import AiRequest, AiResponse
 from .atomic_cards import generate_atom_structure_card, generate_quantum_numbers_card
 from .bcc_card import generate_bcc_card, generate_bcc_3d_html
-from .fcc_card import generate_fcc_card
+from .fcc_card import generate_fcc_card, generate_fcc_3d_html
 from .miller_card import generate_miller_card
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -407,10 +407,11 @@ def _fcc_card_response(request: AiRequest, corrected_text: str, corrections: lis
     if not (_detect_fcc(corrected_text) or _detect_fcc(request.recognized_text)):
         return None
     image_path = generate_fcc_card(GENERATED_DIR)
+    html_path = generate_fcc_3d_html(GENERATED_DIR)
     image_url = f"/generated/{image_path.name}"
     return AiResponse(
         kind="image",
-        content="Tarjeta didáctica generada para estructura FCC.",
+        content="Tarjeta didáctica generada para estructura FCC. Vista 3D interactiva disponible en el computador.",
         metadata={
             "provider": "Tutor_materias",
             "model": "python-fcc-card",
@@ -420,6 +421,7 @@ def _fcc_card_response(request: AiRequest, corrected_text: str, corrections: lis
             "ocr_corrections": corrections,
             "crystal_structure": "fcc",
             "image_url": image_url,
+            "html_3d_url": f"/generated/{html_path.name}",
             "supervisor": "not_required_for_generated_diagram",
         },
     )
