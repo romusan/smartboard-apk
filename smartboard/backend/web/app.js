@@ -147,7 +147,8 @@ function applyMessage(msg) {
     render();
   }
   if (msg.type === 'ai_response') {
-    aiEl.textContent = `${payload.kind || 'text'}\n\n${payload.content || ''}`;
+    const html3d = payload.metadata?.html_3d_url ? `\n\nVista 3D: ${location.origin}${payload.metadata.html_3d_url}` : '';
+    aiEl.textContent = `${payload.kind || 'text'}\n\n${payload.content || ''}${html3d}`;
     aiCards.length = 0;
     aiCards.push({
       id: `${msg.timestamp || Date.now()}`,

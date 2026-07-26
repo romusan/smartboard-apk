@@ -12,7 +12,7 @@ from pathlib import Path
 
 from .models import AiRequest, AiResponse
 from .atomic_cards import generate_atom_structure_card, generate_quantum_numbers_card
-from .bcc_card import generate_bcc_card
+from .bcc_card import generate_bcc_card, generate_bcc_3d_html
 from .fcc_card import generate_fcc_card
 from .miller_card import generate_miller_card
 
@@ -383,10 +383,11 @@ def _bcc_card_response(request: AiRequest, corrected_text: str, corrections: lis
     if not (_detect_bcc(corrected_text) or _detect_bcc(request.recognized_text)):
         return None
     image_path = generate_bcc_card(GENERATED_DIR)
+    html_path = generate_bcc_3d_html(GENERATED_DIR)
     image_url = f"/generated/{image_path.name}"
     return AiResponse(
         kind="image",
-        content="Tarjeta didáctica generada para estructura BCC.",
+        content="Tarjeta didáctica generada para estructura BCC. Vista 3D interactiva disponible en el computador.",
         metadata={
             "provider": "Tutor_materias",
             "model": "python-bcc-card",
@@ -396,6 +397,7 @@ def _bcc_card_response(request: AiRequest, corrected_text: str, corrections: lis
             "ocr_corrections": corrections,
             "crystal_structure": "bcc",
             "image_url": image_url,
+            "html_3d_url": f"/generated/{html_path.name}",
             "supervisor": "not_required_for_generated_diagram",
         },
     )
