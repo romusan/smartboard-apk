@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .models import AiRequest, AiResponse
 from .bcc_card import generate_bcc_card
+from .fcc_card import generate_fcc_card
 from .miller_card import generate_miller_card
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -287,6 +288,12 @@ def _detect_bcc(text: str) -> bool:
     return "bcc" in compact or "bce" in compact or "bec" in compact or "cubicaentradaenelcuerpo" in compact
 
 
+def _detect_fcc(text: str) -> bool:
+    plain = _plain(text)
+    compact = re.sub(r"[^a-z0-9]", "", plain)
+    return "fcc" in compact or "fce" in compact or "fec" in compact or "cubicacentradaenlascaras" in compact
+
+
 def _bcc_card_response(request: AiRequest, corrected_text: str, corrections: list[dict[str, str]], question: str) -> AiResponse | None:
     if not (_detect_bcc(corrected_text) or _detect_bcc(request.recognized_text)):
         return None
@@ -303,6 +310,28 @@ def _bcc_card_response(request: AiRequest, corrected_text: str, corrections: lis
             "recognized_text_corrected": corrected_text,
             "ocr_corrections": corrections,
             "crystal_structure": "bcc",
+            "image_url": image_url,
+            "supervisor": "not_required_for_generated_diagram",
+        },
+    )
+
+
+def _fcc_card_response(request: AiRequest, corrected_text: str, corrections: list[dict[str, str]], question: str) -> AiResponse | None:
+    if not (_detect_fcc(corrected_text) or _detect_fcc(request.recognized_text)):
+        return None
+    image_path = generate_fcc_card(GENERATED_DIR)
+    image_url = f"/generated/{image_path.name}"
+    return AiResponse(
+        kind="image",
+        content="Tarjeta didáctica generada para estructura FCC.",
+        metadata={
+            "provider": "Tutor_materias",
+            "model": "python-fcc-card",
+            "question": question,
+            "recognized_text_original": request.recognized_text,
+            "recognized_text_corrected": corrected_text,
+            "ocr_corrections": corrections,
+            "crystal_structure": "fcc",
             "image_url": image_url,
             "supervisor": "not_required_for_generated_diagram",
         },
@@ -363,6 +392,9 @@ def _ask_tutor_sync(request: AiRequest) -> AiResponse:
     bcc_card = _bcc_card_response(request, corrected_text, corrections, question)
     if bcc_card is not None:
         return bcc_card
+    fcc_card = _fcc_card_response(request, corrected_text, corrections, question)
+    if fcc_card is not None:
+        return fcc_card
     plane_card = _miller_plane_card_response(request, corrected_text, corrections, question)
     if plane_card is not None:
         return plane_card
