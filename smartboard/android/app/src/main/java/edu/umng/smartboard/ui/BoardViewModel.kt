@@ -111,6 +111,20 @@ class BoardViewModel : ViewModel() {
         )
     }
 
+    fun requestMillerPlane(plane: String) {
+        val hkl = plane.filter { it.isDigit() }.take(3).ifBlank { "112" }
+        aiStatus.value = "Generando plano de Miller ($hkl)..."
+        send(
+            "ai_request",
+            mapOf(
+                "action" to "outline",
+                "card_type" to "miller_plane",
+                "recognized_text" to "planos $hkl",
+                "page_context" to "Tarjeta parametrica de planos de Miller solicitada desde Crear esquema: ($hkl)"
+            )
+        )
+    }
+
     fun sendStroke(type: String, stroke: Stroke) = send(type, mapOf("stroke" to stroke), stroke.id)
 
     private fun send(type: String, payload: Map<String, Any?>, strokeId: String? = null) {

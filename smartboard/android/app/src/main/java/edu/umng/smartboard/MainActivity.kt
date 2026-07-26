@@ -36,12 +36,13 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun SmartBoardApp(vm: BoardViewModel) {
-    var server by remember { mutableStateOf("http://192.168.1.10:8000") }
+    var server by remember { mutableStateOf("http://127.0.0.1:8000") }
     var session by remember { mutableStateOf("demo") }
     var color by remember { mutableStateOf("#111111") }
     var width by remember { mutableStateOf(4f) }
     var lasso by remember { mutableStateOf(false) }
     var showOutlineMenu by remember { mutableStateOf(false) }
+    var millerPlane by remember { mutableStateOf("112") }
     val connected by vm.socket.connected.collectAsState()
 
     MaterialTheme {
@@ -81,6 +82,20 @@ fun SmartBoardApp(vm: BoardViewModel) {
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("Dibujos y tarjetas paramétricas")
+                        OutlinedTextField(
+                            value = millerPlane,
+                            onValueChange = { millerPlane = it },
+                            label = { Text("Plano de Miller (hkl)") },
+                            supportingText = { Text("Ejemplo: 112, 100, 111") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Button(onClick = {
+                            vm.requestMillerPlane(millerPlane)
+                            showOutlineMenu = false
+                        }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Planos de Miller")
+                        }
                         Button(onClick = { vm.requestCard("atom_structure"); showOutlineMenu = false }, modifier = Modifier.fillMaxWidth()) {
                             Text("Estructura del átomo")
                         }
@@ -92,6 +107,9 @@ fun SmartBoardApp(vm: BoardViewModel) {
                         }
                         Button(onClick = { vm.requestCard("fcc"); showOutlineMenu = false }, modifier = Modifier.fillMaxWidth()) {
                             Text("Estructura FCC")
+                        }
+                        Button(onClick = { vm.requestCard("sc"); showOutlineMenu = false }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Cúbica simple SC")
                         }
                     }
                 },
