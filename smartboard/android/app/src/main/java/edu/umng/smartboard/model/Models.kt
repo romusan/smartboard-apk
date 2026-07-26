@@ -20,6 +20,13 @@ data class BoardMessage(
     val version: Int = 1,
     val payload: Map<String, Any?> = emptyMap()
 )
+data class AiBoardCard(
+    val id: String = UUID.randomUUID().toString(),
+    val kind: String = "text",
+    val content: String,
+    val x: Float = 0.56f,
+    val y: Float = 0.08f
+)
 data class AiRequest(
     val action: String,
     val session_id: String,

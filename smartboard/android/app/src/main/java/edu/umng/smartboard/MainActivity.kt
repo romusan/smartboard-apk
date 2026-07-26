@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -79,20 +80,39 @@ val AiActions = listOf(
 fun BoardCanvas(vm: BoardViewModel, color: String, width: Float, lasso: Boolean, modifier: Modifier = Modifier) {
     var size by remember { mutableStateOf(IntSize(1, 1)) }
     var activePoints by remember { mutableStateOf(emptyList<BoardPoint>()) }
-    Canvas(
-        modifier.background(Color.White).onSizeChanged { size = it }.pointerInput(color, width, lasso) {
-            detectDragGestures(
-                onDragStart = { offset -> activePoints = listOf(offset.toPoint(size)) },
-                onDrag = { change, _ -> activePoints = activePoints + change.position.toPoint(size) },
-                onDragEnd = {
-                    if (activePoints.size > 1) vm.addStroke(vm.strokeFromPoints(activePoints, if (lasso) "#2563eb" else color, if (lasso) 2f else width))
-                    activePoints = emptyList()
-                }
-            )
+    Box(modifier.background(Color.White)) {
+        Canvas(
+            Modifier.fillMaxSize().onSizeChanged { size = it }.pointerInput(color, width, lasso) {
+                detectDragGestures(
+                    onDragStart = { offset -> activePoints = listOf(offset.toPoint(size)) },
+                    onDrag = { change, _ -> activePoints = activePoints + change.position.toPoint(size) },
+                    onDragEnd = {
+                        if (activePoints.size > 1) vm.addStroke(vm.strokeFromPoints(activePoints, if (lasso) "#2563eb" else color, if (lasso) 2f else width))
+                        activePoints = emptyList()
+                    }
+                )
+            }
+        ) {
+            vm.strokes.forEach { drawVectorStroke(it, size) }
+            drawVectorStroke(Stroke(color = color, width = width, points = activePoints), size)
         }
-    ) {
-        vm.strokes.forEach { drawVectorStroke(it, size) }
-        drawVectorStroke(Stroke(color = color, width = width, points = activePoints), size)
+        vm.aiCards.forEach { card ->
+            Card(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(18.dp)
+                    .widthIn(min = 280.dp, max = 420.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xfffffbeb))
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Respuesta IA supervisada", style = MaterialTheme.typography.titleMedium)
+                    Text(card.content, style = MaterialTheme.typography.bodyMedium)
+                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                        TextButton(onClick = vm::clearAiCards) { Text("Quitar") }
+                    }
+                }
+            }
+        }
     }
 }
 

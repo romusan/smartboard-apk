@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
+import edu.umng.smartboard.model.AiBoardCard
 import edu.umng.smartboard.ai.HandwritingRecognizer
 import edu.umng.smartboard.model.BoardMessage
 import edu.umng.smartboard.model.BoardPoint
@@ -17,11 +18,31 @@ class BoardViewModel : ViewModel() {
     val socket = BoardSocketClient()
     val strokes = mutableStateListOf<Stroke>()
     val undone = mutableStateListOf<Stroke>()
+    val aiCards = mutableStateListOf<AiBoardCard>()
     val recognizedText = mutableStateOf("")
     val aiStatus = mutableStateOf("")
     var sessionId = "demo"
     private val gson = Gson()
     private val handwritingRecognizer = HandwritingRecognizer()
+
+    init {
+        viewModelScope.launch {
+            socket.incoming.collect { message ->
+                if (message.type == "ai_response") {
+                    val content = message.payload["content"]?.toString().orEmpty()
+                    val kind = message.payload["kind"]?.toString() ?: "text"
+                    if (content.isNotBlank()) {
+                        aiCards.clear()
+                        aiCards.add(AiBoardCard(kind = kind, content = content))
+                        aiStatus.value = "Respuesta IA recibida."
+                    }
+                }
+                if (message.type == "command") {
+                    message.payload["error"]?.toString()?.let { aiStatus.value = it }
+                }
+            }
+        }
+    }
 
     fun connect(server: String, session: String) {
         sessionId = session.ifBlank { "demo" }
@@ -46,6 +67,10 @@ class BoardViewModel : ViewModel() {
     }
 
     fun newPage() = send("page_create", mapOf("page_id" to UUID.randomUUID().toString()))
+
+    fun clearAiCards() {
+        aiCards.clear()
+    }
 
     fun askAi(action: String, selected: List<Stroke> = strokes.toList()) {
         viewModelScope.launch {
