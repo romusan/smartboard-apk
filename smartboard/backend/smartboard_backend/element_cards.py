@@ -102,6 +102,27 @@ def normalize_element_symbol(value: str) -> str | None:
     return NAME_TO_SYMBOL.get(compact.lower())
 
 
+def detect_element_query(value: str) -> str | None:
+    cleaned = re.sub(r"[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]", " ", value).strip()
+    if not cleaned:
+        return None
+    words = cleaned.split()
+    plain_words = [word.lower() for word in words]
+    element_keywords = {
+        "elemento", "element", "atomico", "atomica", "atomo", "electron", "electrones",
+        "configuracion", "niveles", "energia", "energeticos", "valencia",
+    }
+    has_keyword = any(word in element_keywords for word in plain_words)
+    for word in words:
+        symbol = word[:1].upper() + word[1:].lower()
+        if symbol in ELEMENTS and (has_keyword or len(words) <= 3):
+            return symbol
+        mapped = NAME_TO_SYMBOL.get(word.lower())
+        if mapped and (has_keyword or len(words) <= 4):
+            return mapped
+    return None
+
+
 def generate_element_energy_card(output_dir: Path, symbol: str) -> Path:
     info = ELEMENTS[symbol]
     output_dir.mkdir(parents=True, exist_ok=True)
