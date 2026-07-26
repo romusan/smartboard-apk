@@ -3,6 +3,8 @@ body { display: grid; grid-template-columns: 310px 1fr; }
 aside { padding: 16px; background: #111827; color: white; display: flex; flex-direction: column; gap: 10px; }
 button, input, textarea { border-radius: 10px; border: 0; padding: 10px; font: inherit; }
 button { cursor: pointer; background: #60a5fa; font-weight: 700; }
+.fileLabel { display: flex; flex-direction: column; gap: 6px; background: #1f2937; padding: 10px; border-radius: 10px; }
+.fileLabel input { padding: 6px; background: white; color: #111827; }
 textarea { min-height: 140px; resize: vertical; }
 pre { white-space: pre-wrap; background: #020617; padding: 10px; border-radius: 10px; min-height: 120px; }
 main { padding: 20px; }

@@ -24,12 +24,15 @@ class BoardSocketClient(private val gson: Gson = Gson()) {
     private val queue = ConcurrentLinkedQueue<String>()
     private var socket: WebSocket? = null
     private var url: String = ""
+    var serverBase: String = ""
+        private set
     val incoming = MutableSharedFlow<BoardMessage>(extraBufferCapacity = 64)
     val connected = MutableStateFlow(false)
     val clientId: String = UUID.randomUUID().toString()
 
     fun connect(server: String, sessionId: String) {
-        url = server.trimEnd('/').replace("http://", "ws://").replace("https://", "wss://") + "/ws/$sessionId"
+        serverBase = server.trimEnd('/')
+        url = serverBase.replace("http://", "ws://").replace("https://", "wss://") + "/ws/$sessionId"
         open()
     }
 

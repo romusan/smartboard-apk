@@ -5,10 +5,11 @@ import os
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
+import pypdfium2 as pdfium
 
 from .models import AiRequest, AiResponse, BoardMessage
 from .ollama import query_ollama
@@ -18,6 +19,7 @@ from .tutor_adapter import query_tutor_materials
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.getenv("SMARTBOARD_DATA", ROOT / "sessions"))
 GENERATED_DIR = Path(os.getenv("SMARTBOARD_GENERATED_DIR", ROOT / "generated"))
+DOCUMENTS_DIR = Path(os.getenv("SMARTBOARD_DOCUMENTS_DIR", ROOT / "documents"))
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 AI_PROVIDER = os.getenv("SMARTBOARD_AI_PROVIDER", "tutor").strip().lower()
@@ -29,6 +31,7 @@ clients: dict[str, set[WebSocket]] = {}
 app.mount("/static", StaticFiles(directory=ROOT / "web"), name="static")
 GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/generated", StaticFiles(directory=GENERATED_DIR), name="generated")
+DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
 
 @app.get("/")
 async def index() -> FileResponse:
@@ -41,6 +44,55 @@ async def create_session() -> dict[str, str]:
 @app.get("/sessions/{session_id}")
 async def session_history(session_id: str) -> dict:
     return {"session_id": session_id, "messages": await store.history(session_id)}
+
+@app.post("/documents/upload")
+async def upload_document(request: Request, session_id: str = "demo", filename: str = "documento.pdf") -> dict:
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Solo se aceptan archivos PDF.")
+    document_id = str(uuid.uuid4())
+    document_dir = DOCUMENTS_DIR / document_id
+    document_dir.mkdir(parents=True, exist_ok=True)
+    pdf_path = document_dir / "source.pdf"
+    pdf_path.write_bytes(await request.body())
+    try:
+        pdf = pdfium.PdfDocument(str(pdf_path))
+        pages = []
+        for index in range(len(pdf)):
+            page = pdf[index]
+            bitmap = page.render(scale=1.8)
+            image = bitmap.to_pil()
+            page_path = document_dir / f"page-{index + 1}.png"
+            image.save(page_path, "PNG")
+            pages.append({
+                "index": index,
+                "page_id": f"doc-{document_id}-page-{index + 1}",
+                "image_url": f"/documents/{document_id}/{page_path.name}",
+                "width": image.width,
+                "height": image.height,
+            })
+        pdf.close()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"No pude convertir el PDF: {exc}") from exc
+    message = BoardMessage(
+        type="object_update",
+        session_id=session_id,
+        client_id="backend",
+        page_id=pages[0]["page_id"] if pages else "page-1",
+        payload={
+            "action": "document_set",
+            "document": {
+                "id": document_id,
+                "filename": filename,
+                "pages": pages,
+                "current_page": 0,
+            },
+        },
+    )
+    await store.append(message)
+    await broadcast(session_id, message.model_dump())
+    return message.payload
+
+app.mount("/documents", StaticFiles(directory=DOCUMENTS_DIR), name="documents")
 
 @app.post("/ai/query")
 async def ai_query(request: AiRequest) -> dict:

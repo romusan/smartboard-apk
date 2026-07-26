@@ -8,6 +8,8 @@ const strokes = new Map();
 const aiCards = [];
 const imageCache = new Map();
 const pending = [];
+let documentState = null;
+let currentPage = 0;
 
 function resize() {
   const rect = canvas.getBoundingClientRect();
@@ -20,6 +22,7 @@ setTimeout(resize, 0);
 
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawDocumentBackground();
   for (const stroke of strokes.values()) drawStroke(stroke);
   for (const card of aiCards) drawAiCard(card);
 }
@@ -28,6 +31,49 @@ function resetBoard() {
   strokes.clear();
   aiCards.length = 0;
   aiEl.textContent = '';
+  render();
+}
+
+function drawDocumentBackground() {
+  const page = documentState?.pages?.[currentPage];
+  if (!page?.image_url) return;
+  const image = imageCache.get(page.image_url);
+  if (!image) {
+    const next = new Image();
+    next.onload = render;
+    next.src = page.image_url;
+    imageCache.set(page.image_url, next);
+    return;
+  }
+  if (!image.complete) return;
+  const ratio = Math.min(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight);
+  const width = image.naturalWidth * ratio;
+  const height = image.naturalHeight * ratio;
+  const x = (canvas.width - width) / 2;
+  const y = (canvas.height - height) / 2;
+  ctx.save();
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(image, x, y, width, height);
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 2 * devicePixelRatio;
+  ctx.strokeRect(x, y, width, height);
+  ctx.restore();
+}
+
+function updatePageInfo() {
+  const pageInfo = document.getElementById('pageInfo');
+  if (!documentState?.pages?.length) {
+    pageInfo.textContent = 'Sin documento';
+    return;
+  }
+  pageInfo.textContent = `${documentState.filename || 'PDF'} · página ${currentPage + 1}/${documentState.pages.length}`;
+}
+
+function setDocument(document, pageIndex = 0) {
+  documentState = document;
+  currentPage = Math.max(0, Math.min(pageIndex, (documentState?.pages?.length || 1) - 1));
+  updatePageInfo();
   render();
 }
 
@@ -135,6 +181,16 @@ function applyMessage(msg) {
     render();
     return;
   }
+  if (msg.type === 'object_update' && payload.action === 'document_set') {
+    setDocument(payload.document, payload.document?.current_page || 0);
+    return;
+  }
+  if (msg.type === 'page_select' && Number.isInteger(payload.page_index)) {
+    currentPage = Math.max(0, Math.min(payload.page_index, (documentState?.pages?.length || 1) - 1));
+    updatePageInfo();
+    render();
+    return;
+  }
   if (['stroke_start', 'stroke_update', 'stroke_end'].includes(msg.type)) {
     const stroke = payload.stroke || { id: msg.stroke_id, page_id: msg.page_id, points: [] };
     const current = strokes.get(stroke.id) || stroke;
@@ -199,6 +255,24 @@ function clearBoardRemote() {
   else pending.push(message);
 }
 
+function sendPageSelect(pageIndex) {
+  if (!documentState?.pages?.length) return;
+  currentPage = Math.max(0, Math.min(pageIndex, documentState.pages.length - 1));
+  const page = documentState.pages[currentPage];
+  const message = {
+    type: 'page_select',
+    session_id: sessionEl.value || 'demo',
+    client_id: 'web-viewer',
+    page_id: page.page_id || 'page-1',
+    timestamp: Date.now(),
+    version: 1,
+    payload: { page_index: currentPage, page_id: page.page_id, document_id: documentState.id }
+  };
+  applyMessage(message);
+  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
+  else pending.push(message);
+}
+
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws/${encodeURIComponent(sessionEl.value || 'demo')}`);
@@ -211,6 +285,26 @@ function connect() {
 document.getElementById('connect').onclick = connect;
 document.getElementById('refresh').onclick = refreshHistory;
 document.getElementById('clear').onclick = clearBoardRemote;
+document.getElementById('prevPage').onclick = () => sendPageSelect(currentPage - 1);
+document.getElementById('nextPage').onclick = () => sendPageSelect(currentPage + 1);
+document.getElementById('pdfFile').onchange = async event => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  statusEl.textContent = 'Subiendo PDF...';
+  const params = new URLSearchParams({ session_id: sessionEl.value || 'demo', filename: file.name });
+  const response = await fetch(`/documents/upload?${params}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/pdf' },
+    body: file
+  });
+  if (!response.ok) {
+    statusEl.textContent = `Error PDF: ${await response.text()}`;
+    return;
+  }
+  const payload = await response.json();
+  setDocument(payload.document, payload.document?.current_page || 0);
+  statusEl.textContent = ws?.readyState === WebSocket.OPEN ? 'Conectado' : 'Desconectado';
+};
 document.getElementById('exportPng').onclick = () => {
   const a = document.createElement('a');
   a.href = canvas.toDataURL('image/png');

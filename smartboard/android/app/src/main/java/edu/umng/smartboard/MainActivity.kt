@@ -57,6 +57,14 @@ fun SmartBoardApp(vm: BoardViewModel) {
                 Button(onClick = vm::newPage) { Text("Nueva página") }
                 AssistChip(onClick = { lasso = !lasso }, label = { Text(if (lasso) "Lazo activo" else "Lazo") })
             }
+            val documentStatus by vm.documentStatus
+            if (documentStatus.isNotBlank()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Button(onClick = vm::previousDocumentPage) { Text("PDF -") }
+                    Text(documentStatus, style = MaterialTheme.typography.bodyMedium)
+                    Button(onClick = vm::nextDocumentPage) { Text("PDF +") }
+                }
+            }
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
                 items(AiActions.size) { index ->
                     val item = AiActions[index]
@@ -158,6 +166,9 @@ fun BoardCanvas(vm: BoardViewModel, color: String, width: Float, lasso: Boolean,
                 )
             }
         ) {
+            vm.backgroundImage.value?.let { image ->
+                drawImage(image, dstSize = androidx.compose.ui.unit.IntSize(size.width, size.height))
+            }
             vm.strokes.forEach { drawVectorStroke(it, size) }
             drawVectorStroke(Stroke(color = color, width = width, points = activePoints), size)
         }

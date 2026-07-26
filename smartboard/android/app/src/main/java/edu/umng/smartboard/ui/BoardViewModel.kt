@@ -1,17 +1,22 @@
-﻿package edu.umng.smartboard.ui
+package edu.umng.smartboard.ui
 
+import android.graphics.BitmapFactory
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.gson.Gson
-import edu.umng.smartboard.model.AiBoardCard
 import edu.umng.smartboard.ai.HandwritingRecognizer
+import edu.umng.smartboard.model.AiBoardCard
 import edu.umng.smartboard.model.BoardMessage
 import edu.umng.smartboard.model.BoardPoint
 import edu.umng.smartboard.model.Stroke
 import edu.umng.smartboard.net.BoardSocketClient
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.net.URL
 import java.util.UUID
 
 class BoardViewModel : ViewModel() {
@@ -21,9 +26,12 @@ class BoardViewModel : ViewModel() {
     val aiCards = mutableStateListOf<AiBoardCard>()
     val recognizedText = mutableStateOf("")
     val aiStatus = mutableStateOf("")
+    val backgroundImage = mutableStateOf<ImageBitmap?>(null)
+    val documentStatus = mutableStateOf("")
     var sessionId = "demo"
-    private val gson = Gson()
     private val handwritingRecognizer = HandwritingRecognizer()
+    private var documentPages: List<Map<String, Any?>> = emptyList()
+    private var currentPageIndex = 0
 
     init {
         viewModelScope.launch {
@@ -39,6 +47,13 @@ class BoardViewModel : ViewModel() {
                 }
                 if (message.type == "command") {
                     message.payload["error"]?.toString()?.let { aiStatus.value = it }
+                }
+                if (message.type == "object_update" && message.payload["action"] == "document_set") {
+                    handleDocumentSet(message.payload["document"])
+                }
+                if (message.type == "page_select") {
+                    val index = (message.payload["page_index"] as? Number)?.toInt() ?: currentPageIndex
+                    selectDocumentPage(index)
                 }
             }
         }
@@ -68,6 +83,10 @@ class BoardViewModel : ViewModel() {
 
     fun newPage() = send("page_create", mapOf("page_id" to UUID.randomUUID().toString()))
 
+    fun previousDocumentPage() = sendDocumentPageSelect(currentPageIndex - 1)
+
+    fun nextDocumentPage() = sendDocumentPageSelect(currentPageIndex + 1)
+
     fun clearAiCards() {
         aiCards.clear()
         send("command", mapOf("action" to "clear_ai_cards"))
@@ -81,11 +100,7 @@ class BoardViewModel : ViewModel() {
                 .getOrDefault("")
                 .trim()
             recognizedText.value = text
-            aiStatus.value = if (text.isBlank()) {
-                "Consulta enviada sin texto reconocido."
-            } else {
-                "Leí: $text"
-            }
+            aiStatus.value = if (text.isBlank()) "Consulta enviada sin texto reconocido." else "Leí: $text"
             send(
                 "ai_request",
                 mapOf(
@@ -146,4 +161,44 @@ class BoardViewModel : ViewModel() {
     }
 
     fun strokeFromPoints(points: List<BoardPoint>, color: String, width: Float) = Stroke(color = color, width = width, points = points)
+
+    @Suppress("UNCHECKED_CAST")
+    private fun handleDocumentSet(rawDocument: Any?) {
+        val document = rawDocument as? Map<String, Any?> ?: return
+        documentPages = document["pages"] as? List<Map<String, Any?>> ?: emptyList()
+        currentPageIndex = (document["current_page"] as? Number)?.toInt() ?: 0
+        selectDocumentPage(currentPageIndex)
+    }
+
+    private fun sendDocumentPageSelect(index: Int) {
+        if (documentPages.isEmpty()) return
+        val nextIndex = index.coerceIn(0, documentPages.lastIndex)
+        val page = documentPages[nextIndex]
+        send(
+            "page_select",
+            mapOf(
+                "page_index" to nextIndex,
+                "page_id" to (page["page_id"] ?: "page-1")
+            )
+        )
+        selectDocumentPage(nextIndex)
+    }
+
+    private fun selectDocumentPage(index: Int) {
+        if (documentPages.isEmpty()) return
+        currentPageIndex = index.coerceIn(0, documentPages.lastIndex)
+        val page = documentPages[currentPageIndex]
+        val relativeUrl = page["image_url"]?.toString() ?: return
+        val imageUrl = if (relativeUrl.startsWith("http")) relativeUrl else "${socket.serverBase}$relativeUrl"
+        documentStatus.value = "PDF página ${currentPageIndex + 1}/${documentPages.size}"
+        viewModelScope.launch {
+            backgroundImage.value = loadImage(imageUrl)
+        }
+    }
+
+    private suspend fun loadImage(url: String): ImageBitmap? = withContext(Dispatchers.IO) {
+        runCatching {
+            URL(url).openStream().use { BitmapFactory.decodeStream(it).asImageBitmap() }
+        }.getOrNull()
+    }
 }
