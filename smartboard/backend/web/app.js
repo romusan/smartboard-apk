@@ -222,6 +222,15 @@ function applyMessage(msg) {
     aiEl.textContent = '';
     render();
   }
+  if (
+    msg.type === 'command' &&
+    ['clear_board', 'delete_board', 'reset_board'].includes(payload.action)
+  ) {
+    strokes.clear();
+    aiCards.length = 0;
+    aiEl.textContent = '';
+    render();
+  }
 }
 
 async function refreshHistory() {
@@ -237,11 +246,7 @@ async function refreshHistory() {
 
 function clearBoardRemote() {
   const strokeIds = [...strokes.keys()];
-  if (!strokeIds.length) {
-    resetBoard();
-    return;
-  }
-  const message = {
+  const eraseMessage = {
     type: 'erase',
     session_id: sessionEl.value || 'demo',
     client_id: 'web-viewer',
@@ -250,9 +255,29 @@ function clearBoardRemote() {
     version: 1,
     payload: { stroke_ids: strokeIds }
   };
-  applyMessage(message);
-  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
-  else pending.push(message);
+  const clearCardsMessage = {
+    type: 'command',
+    session_id: sessionEl.value || 'demo',
+    client_id: 'web-viewer',
+    page_id: 'page-1',
+    timestamp: Date.now() + 1,
+    version: 1,
+    payload: { action: 'clear_ai_cards' }
+  };
+  const clearBoardMessage = {
+    type: 'command',
+    session_id: sessionEl.value || 'demo',
+    client_id: 'web-viewer',
+    page_id: 'page-1',
+    timestamp: Date.now() + 2,
+    version: 1,
+    payload: { action: 'clear_board' }
+  };
+  [eraseMessage, clearCardsMessage, clearBoardMessage].forEach(message => {
+    applyMessage(message);
+    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
+    else pending.push(message);
+  });
 }
 
 function sendPageSelect(pageIndex) {

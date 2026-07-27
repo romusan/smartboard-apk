@@ -61,8 +61,14 @@ class BoardViewModel : ViewModel() {
         }
     }
 
-    fun eraseLast() {
-        strokes.removeLastOrNull()?.let { send("erase", mapOf("stroke_ids" to listOf(it.id))) }
+    fun eraseBoard() {
+        val strokeIds = strokes.map { it.id }
+        strokes.clear()
+        aiCards.clear()
+        undone.clear()
+        if (strokeIds.isNotEmpty()) send("erase", mapOf("stroke_ids" to strokeIds))
+        send("command", mapOf("action" to "clear_ai_cards"))
+        send("command", mapOf("action" to "clear_board"))
     }
 
     fun newPage() = send("page_create", mapOf("page_id" to UUID.randomUUID().toString()))
@@ -170,6 +176,15 @@ class BoardViewModel : ViewModel() {
         }
         if (message.type == "command") {
             message.payload["error"]?.toString()?.let { aiStatus.value = it }
+            val action = message.payload["action"]?.toString().orEmpty()
+            if (action in listOf("clear_ai_cards", "clear_ai_card", "clear_ai", "delete_ai_cards")) {
+                aiCards.clear()
+            }
+            if (action in listOf("clear_board", "delete_board", "reset_board")) {
+                strokes.clear()
+                aiCards.clear()
+                undone.clear()
+            }
         }
         if (message.type == "object_update" && message.payload["action"] == "document_set") {
             handleDocumentSet(message.payload["document"])

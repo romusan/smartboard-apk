@@ -53,9 +53,22 @@ fun SmartBoardApp(vm: BoardViewModel) {
                 OutlinedTextField(session, { session = it }, label = { Text("Sesión") }, modifier = Modifier.width(140.dp))
                 Button(onClick = { vm.connect(server, session) }) { Text(if (connected) "Conectado" else "Conectar") }
                 Button(onClick = vm::undo) { Text("Deshacer") }
-                Button(onClick = vm::eraseLast) { Text("Borrar") }
+                Button(onClick = vm::eraseBoard) { Text("Borrar") }
                 Button(onClick = vm::newPage) { Text("Nueva página") }
                 AssistChip(onClick = { lasso = !lasso }, label = { Text(if (lasso) "Lazo activo" else "Lazo") })
+            }
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                items(PenColors.size) { index ->
+                    val item = PenColors[index]
+                    AssistChip(
+                        onClick = { color = item.hex },
+                        label = { Text(item.label) },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = Color(android.graphics.Color.parseColor(item.hex)),
+                            labelColor = if (item.hex in listOf("#111111", "#7c3aed", "#dc2626", "#2563eb")) Color.White else Color.Black
+                        )
+                    )
+                }
             }
             val documentStatus by vm.documentStatus
             if (documentStatus.isNotBlank()) {
@@ -147,6 +160,18 @@ fun SmartBoardApp(vm: BoardViewModel) {
 val AiActions = listOf(
     "Explicar" to "explain", "Completar idea" to "complete", "Corregir" to "correct",
     "Resolver" to "solve", "Crear esquema" to "outline", "Generar ejercicio" to "exercise", "Dibujar en 3D" to "draw3d"
+)
+
+data class PenColor(val label: String, val hex: String)
+
+val PenColors = listOf(
+    PenColor("Negro", "#111111"),
+    PenColor("Azul", "#2563eb"),
+    PenColor("Rojo", "#dc2626"),
+    PenColor("Verde", "#16a34a"),
+    PenColor("Morado", "#7c3aed"),
+    PenColor("Naranja", "#f97316"),
+    PenColor("Amarillo", "#facc15")
 )
 
 @Composable
