@@ -57,27 +57,7 @@ fun SmartBoardApp(vm: BoardViewModel) {
                 Button(onClick = vm::newPage) { Text("Nueva página") }
                 AssistChip(onClick = { lasso = !lasso }, label = { Text(if (lasso) "Lazo activo" else "Lazo") })
             }
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                items(PenColors.size) { index ->
-                    val item = PenColors[index]
-                    AssistChip(
-                        onClick = { color = item.hex },
-                        label = { Text(item.label) },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = Color(android.graphics.Color.parseColor(item.hex)),
-                            labelColor = if (item.hex in listOf("#111111", "#7c3aed", "#dc2626", "#2563eb")) Color.White else Color.Black
-                        )
-                    )
-                }
-            }
             val documentStatus by vm.documentStatus
-            if (documentStatus.isNotBlank()) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Button(onClick = vm::previousDocumentPage) { Text("PDF -") }
-                    Text(documentStatus, style = MaterialTheme.typography.bodyMedium)
-                    Button(onClick = vm::nextDocumentPage) { Text("PDF +") }
-                }
-            }
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
                 items(AiActions.size) { index ->
                     val item = AiActions[index]
@@ -95,7 +75,15 @@ fun SmartBoardApp(vm: BoardViewModel) {
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
-            BoardCanvas(vm, color, width, lasso, Modifier.fillMaxSize())
+            BoardCanvas(
+                vm = vm,
+                color = color,
+                onColorChange = { color = it },
+                width = width,
+                lasso = lasso,
+                documentStatus = documentStatus,
+                modifier = Modifier.fillMaxSize()
+            )
         }
         if (showOutlineMenu) {
             AlertDialog(
@@ -175,7 +163,15 @@ val PenColors = listOf(
 )
 
 @Composable
-fun BoardCanvas(vm: BoardViewModel, color: String, width: Float, lasso: Boolean, modifier: Modifier = Modifier) {
+fun BoardCanvas(
+    vm: BoardViewModel,
+    color: String,
+    onColorChange: (String) -> Unit,
+    width: Float,
+    lasso: Boolean,
+    documentStatus: String,
+    modifier: Modifier = Modifier
+) {
     var size by remember { mutableStateOf(IntSize(1, 1)) }
     var activePoints by remember { mutableStateOf(emptyList<BoardPoint>()) }
     Box(modifier.background(Color.White)) {
@@ -211,6 +207,46 @@ fun BoardCanvas(vm: BoardViewModel, color: String, width: Float, lasso: Boolean,
                     Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                         TextButton(onClick = vm::clearAiCards) { Text("Quitar") }
                     }
+                }
+            }
+        }
+        Column(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            PenColors.forEach { item ->
+                FilledTonalButton(
+                    onClick = { onColorChange(item.hex) },
+                    modifier = Modifier.width(82.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = Color(android.graphics.Color.parseColor(item.hex)),
+                        contentColor = if (item.hex in listOf("#111111", "#7c3aed", "#dc2626", "#2563eb")) Color.White else Color.Black
+                    ),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)
+                ) {
+                    Text(if (item.hex == color) "✓ ${item.label}" else item.label)
+                }
+            }
+        }
+        if (documentStatus.isNotBlank()) {
+            Card(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 10.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xeeffffff))
+            ) {
+                Column(
+                    modifier = Modifier.padding(10.dp).width(96.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("PDF", style = MaterialTheme.typography.titleSmall)
+                    Button(onClick = vm::previousDocumentPage, modifier = Modifier.fillMaxWidth()) { Text("▲") }
+                    Text(documentStatus.replace("PDF ", ""), style = MaterialTheme.typography.bodySmall)
+                    Button(onClick = vm::nextDocumentPage, modifier = Modifier.fillMaxWidth()) { Text("▼") }
                 }
             }
         }
