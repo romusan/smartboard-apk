@@ -27,6 +27,7 @@ _components_lock = threading.Lock()
 SMARTBOARD_AI_TIMEOUT = int(os.getenv("SMARTBOARD_AI_TIMEOUT", "75"))
 SMARTBOARD_GEMINI_SUPERVISION = os.getenv("SMARTBOARD_GEMINI_SUPERVISION", "true").strip().lower() in {"1", "true", "yes", "si", "sí"}
 SMARTBOARD_GEMINI_TIMEOUT = int(os.getenv("SMARTBOARD_GEMINI_TIMEOUT", "8"))
+SMARTBOARD_CHAT_MODEL = os.getenv("SMARTBOARD_CHAT_MODEL", "smartmaintai-tutor:latest").strip()
 GENERATED_DIR = Path(os.getenv("SMARTBOARD_GENERATED_DIR", Path(__file__).resolve().parent.parent / "generated"))
 
 ACTION_PROMPTS = {
@@ -144,6 +145,44 @@ Resumen de trazos vectoriales: {stroke_count} trazos, {points_count} puntos.
 Responde como tutor de la asignatura de materiales. Usa el material del curso, evita inventar,
 y entrega una respuesta breve, editable y útil para insertar en la pizarra.
 """.strip()
+
+
+def _build_rag_question(request: AiRequest, corrected_text: str) -> str:
+    action = ACTION_PROMPTS.get(request.action, ACTION_PROMPTS["explain"])
+    text = corrected_text or request.recognized_text.strip()
+    if not text:
+        text = "Interpreta los trazos manuscritos seleccionados y responde el concepto principal."
+    context = request.page_context.strip()
+    return f"""
+Acción: {action}
+Pregunta manuscrita reconocida: {text}
+Contexto breve de la página: {context}
+
+Responde en español para una pizarra de clase de Ciencia e Ingeniería de Materiales.
+Formato: máximo 6 viñetas o pasos, claro, didáctico y sin repetir el enunciado.
+""".strip()
+
+
+def _clean_board_answer(answer: str) -> str:
+    lines: list[str] = []
+    seen: set[str] = set()
+    for raw_line in answer.splitlines():
+        line = raw_line.strip()
+        if not line:
+            if lines and lines[-1]:
+                lines.append("")
+            continue
+        plain = _plain(line)
+        if plain in seen:
+            continue
+        if plain.startswith("texto seleccionado o reconocido") or plain.startswith("correccion ocr aplicada"):
+            continue
+        if plain.startswith("resumen de trazos vectoriales"):
+            continue
+        seen.add(plain)
+        lines.append(raw_line.rstrip())
+    cleaned = "\n".join(lines).strip()
+    return cleaned[:1800].strip()
 
 
 def _response_kind(action: str, content: str) -> str:
@@ -539,9 +578,48 @@ incierta ni extensa.
         return answer, {"supervisor": "failed", "supervisor_error": str(exc)}
 
 
+def _ollama_rag_answer(index, question: str, chat_model: str) -> tuple[str, list]:
+    from app.local_chat import FixedModelChat
+
+    previous_chat_client = getattr(index, "chat_client", None)
+    index.chat_client = FixedModelChat(index.ollama, model=chat_model)
+    try:
+        return index.answer(question, chat_model, mode="fuentes")
+    finally:
+        index.chat_client = previous_chat_client
+
+
+def _friendly_ai_failure(exc: Exception, request: AiRequest, corrected_text: str, corrections: list[dict[str, str]], question: str) -> AiResponse:
+    text = corrected_text or request.recognized_text.strip()
+    content = (
+        "No pude completar la consulta con Ollama en este intento.\n\n"
+        f"Texto leído: {text or 'sin texto reconocido'}\n\n"
+        "Qué puedes hacer ahora:\n"
+        "1. Escribe más grande y separado.\n"
+        "2. Encierra solo la pregunta con el lazo.\n"
+        "3. Vuelve a pulsar Consultar IA.\n\n"
+        "Si Ollama está cargando modelo, espera unos segundos y reintenta."
+    )
+    return AiResponse(
+        kind="text",
+        content=content,
+        metadata={
+            "provider": "Tutor_materias",
+            "model": "ollama-unavailable",
+            "question": question,
+            "recognized_text_original": request.recognized_text,
+            "recognized_text_corrected": corrected_text,
+            "ocr_corrections": corrections,
+            "ollama_error": f"{type(exc).__name__}: {exc}",
+            "supervisor": "skipped_no_ollama_draft",
+        },
+    )
+
+
 def _ask_tutor_sync(request: AiRequest) -> AiResponse:
     corrected_text, corrections = autocorrect_materials_text(request.recognized_text)
     question = _build_question(request)
+    rag_question = _build_rag_question(request, corrected_text)
     atom_card = _atom_card_response(request, corrected_text, corrections, question)
     if atom_card is not None:
         return atom_card
@@ -580,15 +658,40 @@ def _ask_tutor_sync(request: AiRequest) -> AiResponse:
             },
         )
     cfg, index = _load_components()
-    answer, hits = index.answer(question, cfg["chat_model"], mode="fuentes")
+    chat_model = SMARTBOARD_CHAT_MODEL or cfg["chat_model"]
+    verified = index.exact_verified_answer(corrected_text or request.recognized_text)
+    if verified is not None:
+        answer, verified_sources, _ = verified
+        supervised_answer, supervisor_metadata = _supervise_answer(answer, question)
+        supervised_answer = _clean_board_answer(supervised_answer)
+        return AiResponse(
+            kind=_response_kind(request.action, supervised_answer),
+            content=supervised_answer,
+            metadata={
+                "provider": "Tutor_materias",
+                "model": "verified-answer",
+                "sources": verified_sources,
+                "question": question,
+                "recognized_text_original": request.recognized_text,
+                "recognized_text_corrected": corrected_text,
+                "ocr_corrections": corrections,
+                **supervisor_metadata,
+            },
+        )
+    try:
+        answer, hits = _ollama_rag_answer(index, rag_question, chat_model)
+    except Exception as exc:
+        return _friendly_ai_failure(exc, request, corrected_text, corrections, question)
+    answer = _clean_board_answer(answer)
     supervised_answer, supervisor_metadata = _supervise_answer(answer, question)
+    supervised_answer = _clean_board_answer(supervised_answer)
     sources = [f"{hit.source} ({hit.location})" for hit in hits[:5]]
     return AiResponse(
         kind=_response_kind(request.action, supervised_answer),
         content=supervised_answer,
         metadata={
             "provider": "Tutor_materias",
-            "model": cfg.get("chat_model"),
+            "model": chat_model,
             "sources": sources,
             "question": question,
             "recognized_text_original": request.recognized_text,

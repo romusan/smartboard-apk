@@ -97,7 +97,7 @@ class BoardViewModel : ViewModel() {
                     "action" to action,
                     "strokes" to selected,
                     "recognized_text" to text,
-                    "page_context" to "Página enviada desde APK. Pregunta manuscrita: $text"
+                    "page_context" to buildPageContext(text, selected)
                 )
             )
         }
@@ -151,6 +151,14 @@ class BoardViewModel : ViewModel() {
     }
 
     fun strokeFromPoints(points: List<BoardPoint>, color: String, width: Float) = Stroke(color = color, width = width, points = points)
+
+    private fun buildPageContext(text: String, selected: List<Stroke>): String {
+        val pointCount = selected.sumOf { it.points.size }
+        return "Página enviada desde APK. Pregunta manuscrita OCR: $text. " +
+            "Si el OCR es dudoso, interpreta los trazos vectoriales como escritura manuscrita en español. " +
+            "Trazos seleccionados: ${selected.size}; puntos: $pointCount. " +
+            "Responde para insertar en la pizarra como tarjeta didáctica breve."
+    }
 
     private fun applyMessage(message: BoardMessage) {
         if (message.type == "sync_state") {
