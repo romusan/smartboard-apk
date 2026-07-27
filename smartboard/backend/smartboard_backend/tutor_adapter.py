@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sqlite3
 from urllib import parse, request as urlrequest
 import re
 import sys
@@ -29,6 +30,7 @@ SMARTBOARD_GEMINI_SUPERVISION = os.getenv("SMARTBOARD_GEMINI_SUPERVISION", "true
 SMARTBOARD_GEMINI_TIMEOUT = int(os.getenv("SMARTBOARD_GEMINI_TIMEOUT", "8"))
 SMARTBOARD_CHAT_MODEL = os.getenv("SMARTBOARD_CHAT_MODEL", "smartmaintai-tutor:latest").strip()
 GENERATED_DIR = Path(os.getenv("SMARTBOARD_GENERATED_DIR", Path(__file__).resolve().parent.parent / "generated"))
+VERIFIED_ANSWERS_PATH = PROJECT_ROOT / "config" / "verified_answers.json"
 
 ACTION_PROMPTS = {
     "explain": "Explica de forma clara y breve el contenido seleccionado.",
@@ -183,6 +185,30 @@ def _clean_board_answer(answer: str) -> str:
         lines.append(raw_line.rstrip())
     cleaned = "\n".join(lines).strip()
     return cleaned[:1800].strip()
+
+
+def _token_overlap_score(left: str, right: str) -> float:
+    left_tokens = {token for token in re.findall(r"[a-z0-9]+", _plain(left)) if len(token) >= 3}
+    right_tokens = {token for token in re.findall(r"[a-z0-9]+", _plain(right)) if len(token) >= 3}
+    if not left_tokens or not right_tokens:
+        return 0.0
+    return len(left_tokens & right_tokens) / max(1, min(len(left_tokens), len(right_tokens)))
+
+
+def _verified_text_answer(text: str) -> tuple[str, list[str], float] | None:
+    if not text.strip() or not VERIFIED_ANSWERS_PATH.is_file():
+        return None
+    try:
+        items = json.loads(VERIFIED_ANSWERS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    best: tuple[str, list[str], float] | None = None
+    for item in items:
+        questions = [str(item.get("question", ""))] + [str(alias) for alias in item.get("aliases", [])]
+        score = max((_token_overlap_score(text, question) for question in questions), default=0.0)
+        if best is None or score > best[2]:
+            best = (str(item.get("answer", "")), list(item.get("sources", [])), score)
+    return best if best and best[2] >= 0.55 and best[0] else None
 
 
 def _response_kind(action: str, content: str) -> str:
@@ -589,6 +615,50 @@ def _ollama_rag_answer(index, question: str, chat_model: str) -> tuple[str, list
         index.chat_client = previous_chat_client
 
 
+def _lexical_rag_answer(index, question: str) -> tuple[str, list[str]] | None:
+    db_path = getattr(index, "db_path", None)
+    if db_path is None or not Path(db_path).is_file():
+        return None
+    query_tokens = {token for token in re.findall(r"[a-z0-9]+", _plain(question)) if len(token) >= 3}
+    if not query_tokens:
+        return None
+    rows: list[tuple[str, str, str]] = []
+    try:
+        with sqlite3.connect(db_path) as db:
+            rows = db.execute("SELECT path, location, text FROM chunks").fetchall()
+    except Exception:
+        return None
+    scored: list[tuple[float, str, str, str]] = []
+    for source, location, text in rows:
+        text_tokens = {token for token in re.findall(r"[a-z0-9]+", _plain(text)) if len(token) >= 3}
+        if not text_tokens:
+            continue
+        overlap = len(query_tokens & text_tokens)
+        if overlap:
+            score = overlap / len(query_tokens)
+            if any(token in _plain(source) for token in query_tokens):
+                score += 0.15
+            scored.append((score, source, location, text))
+    scored.sort(key=lambda item: item[0], reverse=True)
+    top = scored[:3]
+    if not top or top[0][0] < 0.22:
+        return None
+    bullets: list[str] = []
+    sources: list[str] = []
+    for _, source, location, text in top:
+        snippet = re.sub(r"\s+", " ", text).strip()
+        sentences = re.split(r"(?<=[.!?])\s+", snippet)
+        useful = " ".join(sentences[:2]).strip() or snippet[:420]
+        bullets.append(f"- {useful[:420]}")
+        sources.append(f"{source} ({location})")
+    answer = (
+        "Ollama no completó la respuesta, pero el RAG encontró material útil del curso:\n\n"
+        + "\n".join(bullets)
+        + "\n\nPuedes usar esto como base y volver a consultar cuando Ollama libere memoria."
+    )
+    return answer, sources
+
+
 def _friendly_ai_failure(exc: Exception, request: AiRequest, corrected_text: str, corrections: list[dict[str, str]], question: str) -> AiResponse:
     text = corrected_text or request.recognized_text.strip()
     content = (
@@ -659,7 +729,10 @@ def _ask_tutor_sync(request: AiRequest) -> AiResponse:
         )
     cfg, index = _load_components()
     chat_model = SMARTBOARD_CHAT_MODEL or cfg["chat_model"]
-    verified = index.exact_verified_answer(corrected_text or request.recognized_text)
+    verified = (
+        _verified_text_answer(corrected_text or request.recognized_text)
+        or index.exact_verified_answer(corrected_text or request.recognized_text)
+    )
     if verified is not None:
         answer, verified_sources, _ = verified
         supervised_answer, supervisor_metadata = _supervise_answer(answer, question)
@@ -681,6 +754,24 @@ def _ask_tutor_sync(request: AiRequest) -> AiResponse:
     try:
         answer, hits = _ollama_rag_answer(index, rag_question, chat_model)
     except Exception as exc:
+        lexical = _lexical_rag_answer(index, rag_question)
+        if lexical is not None:
+            answer, sources = lexical
+            return AiResponse(
+                kind="text",
+                content=_clean_board_answer(answer),
+                metadata={
+                    "provider": "Tutor_materias",
+                    "model": "rag-lexical-fallback",
+                    "sources": sources,
+                    "question": question,
+                    "recognized_text_original": request.recognized_text,
+                    "recognized_text_corrected": corrected_text,
+                    "ocr_corrections": corrections,
+                    "ollama_error": f"{type(exc).__name__}: {exc}",
+                    "supervisor": "skipped_no_ollama_draft",
+                },
+            )
         return _friendly_ai_failure(exc, request, corrected_text, corrections, question)
     answer = _clean_board_answer(answer)
     supervised_answer, supervisor_metadata = _supervise_answer(answer, question)
