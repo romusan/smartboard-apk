@@ -219,7 +219,14 @@ fun BoardCanvas(
             vm.strokes.forEach { drawVectorStroke(it, size) }
             drawVectorStroke(Stroke(color = color, width = width, points = activePoints), size)
         }
-        vm.aiCards.forEach { card ->
+        val simulationCards = vm.aiCards.filter { it.simulationUrl != null }
+        var simulationIndex by remember { mutableIntStateOf(0) }
+        LaunchedEffect(simulationCards.size) {
+            if (simulationCards.isNotEmpty()) simulationIndex = simulationCards.lastIndex
+        }
+        val visibleCards = vm.aiCards.filter { it.simulationUrl == null } +
+            listOfNotNull(simulationCards.getOrNull(simulationIndex))
+        visibleCards.forEach { card ->
             Card(
                 modifier = if (card.simulationUrl != null) {
                     Modifier.align(Alignment.Center).fillMaxSize().padding(12.dp)
@@ -230,7 +237,22 @@ fun BoardCanvas(
             ) {
                 Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (card.simulationUrl != null) "Simulación del mecanismo" else "Respuesta IA supervisada", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            if (card.simulationUrl != null) "Simulación ${simulationIndex + 1} de ${simulationCards.size}" else "Respuesta IA supervisada",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        if (card.simulationUrl != null && simulationCards.size > 1) {
+                            Row {
+                                TextButton(
+                                    onClick = { simulationIndex = (simulationIndex - 1).coerceAtLeast(0) },
+                                    enabled = simulationIndex > 0
+                                ) { Text("Anterior") }
+                                TextButton(
+                                    onClick = { simulationIndex = (simulationIndex + 1).coerceAtMost(simulationCards.lastIndex) },
+                                    enabled = simulationIndex < simulationCards.lastIndex
+                                ) { Text("Siguiente") }
+                            }
+                        }
                         TextButton(onClick = vm::clearAiCards) { Text("Cerrar") }
                     }
                     if (card.simulationUrl == null) Text(card.content, style = MaterialTheme.typography.bodyMedium)

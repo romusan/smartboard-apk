@@ -205,7 +205,6 @@ class BoardViewModel : ViewModel() {
             val content = message.payload["content"]?.toString().orEmpty()
             val kind = message.payload["kind"]?.toString() ?: "text"
             if (content.isNotBlank()) {
-                aiCards.clear()
                 val metadata = message.payload["metadata"] as? Map<*, *>
                 val relativeUrl = metadata?.get("simulation_url")?.toString()
                 val simulationUrl = relativeUrl?.let { if (it.startsWith("http")) it else "${socket.serverBase}$it" }

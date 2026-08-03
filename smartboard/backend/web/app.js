@@ -5,6 +5,18 @@ const sessionEl = document.getElementById('session');
 const aiEl = document.getElementById('ai');
 const simulationPanel = document.getElementById('simulationPanel');
 const mechanismSimulation = document.getElementById('mechanismSimulation');
+const simulationCounter = document.getElementById('simulationCounter');
+const simulationUrls = [];
+let simulationIndex = -1;
+function showSimulation(index) {
+  if (!simulationUrls.length) return;
+  simulationIndex = Math.max(0, Math.min(index, simulationUrls.length - 1));
+  mechanismSimulation.src = `${simulationUrls[simulationIndex]}?view=${Date.now()}`;
+  simulationCounter.textContent = `Simulación ${simulationIndex + 1} de ${simulationUrls.length}`;
+  simulationPanel.hidden = false;
+}
+document.getElementById('previousSimulation').onclick = () => showSimulation(simulationIndex - 1);
+document.getElementById('nextSimulation').onclick = () => showSimulation(simulationIndex + 1);
 document.getElementById('closeSimulation').onclick = () => {
   simulationPanel.hidden = true;
   mechanismSimulation.src = 'about:blank';
@@ -215,10 +227,9 @@ function applyMessage(msg) {
     aiEl.textContent = `${payload.kind || 'text'}\n\n${payload.content || ''}${html3d}`;
     const simulationUrl = payload.metadata?.simulation_url;
     if (simulationUrl) {
-      mechanismSimulation.src = simulationUrl;
-      simulationPanel.hidden = false;
+      if (!simulationUrls.includes(simulationUrl)) simulationUrls.push(simulationUrl);
+      showSimulation(simulationUrls.length - 1);
     }
-    aiCards.length = 0;
     aiCards.push({
       id: `${msg.timestamp || Date.now()}`,
       kind: payload.kind || 'text',

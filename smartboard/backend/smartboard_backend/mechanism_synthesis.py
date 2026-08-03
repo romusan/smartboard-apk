@@ -166,7 +166,12 @@ def synthesize_mechanism(request: AiRequest, generated_dir: Path) -> AiResponse:
     candidate, rms = _pso_tass(target, seed)
     preferred_family = "Stephenson III" if _complexity(target) > 0.13 else "Watt I"
     filename = f"mechanism_{digest}.html"
-    (generated_dir / filename).write_text(_html_document(digest, target, candidate, rms), encoding="utf-8")
+    document = _html_document(digest, target, candidate, rms)
+    document = document.replace("c.width*.72,c.height*.72", "c.width*.94,c.height*.94")
+    document = document.replace("ox=c.width*.43,oy=c.height*.53", "ox=c.width*.50,oy=c.height*.50")
+    document = document.replace("t+.0058", "t+.0087")
+    document = document.replace("18 s", "12 s")
+    (generated_dir / filename).write_text(document, encoding="utf-8")
     params = {name: round(value, 4) for name, value in zip(("bastidor", "manivela", "acoplador", "balancin", "u", "v", "fase"), candidate)}
     return AiResponse(
         kind="threejs",
