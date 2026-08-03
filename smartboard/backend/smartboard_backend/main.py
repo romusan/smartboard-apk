@@ -60,7 +60,7 @@ async def powerpoint_frame(request: Request, session_id: str = "demo") -> dict:
         type="object_update",
         session_id=session_id,
         client_id="powerpoint-overlay",
-        payload={"action": "live_background", "image_url": image_url, "source": "powerpoint"},
+        payload={"action": "live_background", "image_url": image_url, "source": "document_screen"},
     )
     await broadcast(session_id, message.model_dump())
     return {"ok": True, "image_url": image_url}

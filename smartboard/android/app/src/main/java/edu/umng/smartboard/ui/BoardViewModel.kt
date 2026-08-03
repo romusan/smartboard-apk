@@ -232,7 +232,7 @@ class BoardViewModel : ViewModel() {
             val imageUrl = if (relativeUrl.startsWith("http")) relativeUrl else "${socket.serverBase}$relativeUrl"
             viewModelScope.launch {
                 backgroundImage.value = loadImage(imageUrl)
-                documentStatus.value = "PowerPoint en vivo"
+                documentStatus.value = "PowerPoint/PDF en vivo"
             }
         }
         if (message.type == "page_select") {

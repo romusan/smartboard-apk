@@ -69,7 +69,7 @@ gdi32.GetDIBits.argtypes = [
 gdi32.GetDIBits.restype = ctypes.c_int
 
 
-def powerpoint_window() -> tuple[int, tuple[int, int, int, int]] | None:
+def presentation_window() -> tuple[int, tuple[int, int, int, int]] | None:
     matches: list[tuple[int, tuple[int, int, int, int], str]] = []
     callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
     user32.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
@@ -84,7 +84,11 @@ def powerpoint_window() -> tuple[int, tuple[int, int, int, int]] | None:
         title = ctypes.create_unicode_buffer(length + 1)
         user32.GetWindowTextW(hwnd, title, length + 1)
         text = title.value.lower()
-        if "powerpoint" not in text and "presentación con diapositivas" not in text and "slide show" not in text:
+        supported = (
+            "powerpoint" in text or "presentación con diapositivas" in text or "slide show" in text
+            or ".pdf" in text or "adobe acrobat" in text or "lector de pdf" in text
+        )
+        if not supported:
             return True
         rect = wintypes.RECT()
         user32.GetWindowRect(hwnd, ctypes.byref(rect))
@@ -136,16 +140,16 @@ def post_json(path: str, payload: dict) -> None:
 class PowerPointOverlay:
     def __init__(self) -> None:
         self.root = tk.Tk()
-        self.root.title("Velo SmartBoard para PowerPoint")
+        self.root.title("Velo SmartBoard para PowerPoint y PDF")
         self.root.attributes("-topmost", True)
         self.root.attributes("-transparentcolor", TRANSPARENT)
         self.root.configure(bg=TRANSPARENT)
         self.canvas = tk.Canvas(self.root, bg=TRANSPARENT, highlightthickness=0, cursor="pencil")
         self.canvas.pack(fill="both", expand=True)
         self.toolbar = tk.Toplevel(self.root)
-        self.toolbar.title("SmartBoard PowerPoint")
+        self.toolbar.title("SmartBoard · PowerPoint/PDF")
         self.toolbar.attributes("-topmost", True)
-        self.status = tk.StringVar(value="Abre PowerPoint para iniciar")
+        self.status = tk.StringVar(value="Abre PowerPoint o un PDF para iniciar")
         self.mode_button = tk.Button(self.toolbar, text="Modo: escribir", command=self.toggle_mode, bg="#2563eb", fg="white")
         self.mode_button.pack(side="left", padx=6, pady=5)
         tk.Button(self.toolbar, text="Borrar tinta", command=self.clear, bg="#f59e0b").pack(side="left", padx=4)
@@ -162,7 +166,7 @@ class PowerPointOverlay:
         threading.Thread(target=self.capture_loop, daemon=True).start()
 
     def follow_powerpoint(self) -> None:
-        found = powerpoint_window()
+        found = presentation_window()
         if found:
             _hwnd, rect = found
             if rect != self.last_rect:
@@ -170,15 +174,15 @@ class PowerPointOverlay:
                 self.root.geometry(f"{right-left}x{bottom-top}+{left}+{top}")
                 self.toolbar.geometry(f"+{left+12}+{top+12}")
                 self.last_rect = rect
-            self.status.set("PowerPoint conectado · tableta: sesión demo")
+            self.status.set("Documento conectado · tableta: sesión demo")
         else:
-            self.status.set("Abre PowerPoint para iniciar")
+            self.status.set("Abre PowerPoint o un PDF para iniciar")
         if self.running:
             self.root.after(350, self.follow_powerpoint)
 
     def capture_loop(self) -> None:
         while self.running:
-            found = powerpoint_window()
+            found = presentation_window()
             if found:
                 image = capture_window(*found)
                 if image:
