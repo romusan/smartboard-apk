@@ -116,6 +116,18 @@ async def ai_query(request: AiRequest) -> dict:
 async def run_ai(request: AiRequest) -> AiResponse:
     if request.action == "mechanism_synthesis" or request.subject == "mecanismos" and request.strokes:
         return synthesize_mechanism(request, GENERATED_DIR)
+    atomic_request = f"{request.recognized_text} {request.page_context}".lower().replace("_", " ")
+    if "atomic interaction" in atomic_request or "interaccion atomica" in atomic_request:
+        return AiResponse(
+            kind="threejs",
+            content=("Simulación de materiales: energía potencial de Lennard-Jones, fuerza atractiva, "
+                     "fuerza repulsiva y distancia de equilibrio entre dos átomos."),
+            metadata={
+                "simulation_url": "/static/atomic_energy.html",
+                "card_type": "atomic_interaction",
+                "model": "lennard-jones",
+            },
+        )
     if AI_PROVIDER in {"tutor", "tutor_materias", "materials"}:
         return await query_tutor_materials(request)
     return await query_ollama(OLLAMA_URL, OLLAMA_MODEL, request)

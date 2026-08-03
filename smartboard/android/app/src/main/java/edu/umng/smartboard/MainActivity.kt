@@ -127,6 +127,9 @@ fun SmartBoardApp(vm: BoardViewModel) {
                         Button(onClick = { vm.requestCard("atom_structure"); showOutlineMenu = false }, modifier = Modifier.fillMaxWidth()) {
                             Text("Estructura del átomo")
                         }
+                        Button(onClick = { vm.requestCard("atomic_interaction"); showOutlineMenu = false }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Fuerzas y energía entre átomos")
+                        }
                         Button(onClick = { vm.requestCard("quantum_numbers"); showOutlineMenu = false }, modifier = Modifier.fillMaxWidth()) {
                             Text("Números cuánticos / niveles")
                         }
@@ -239,7 +242,7 @@ fun BoardCanvas(
                 Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            if (card.simulationUrl != null) "Simulación ${simulationIndex + 1} de ${simulationCards.size}" else "Respuesta IA supervisada",
+                            if (card.simulationUrl != null) "Simulación interactiva ${simulationIndex + 1} de ${simulationCards.size}" else "Respuesta IA supervisada",
                             style = MaterialTheme.typography.titleMedium
                         )
                         if (card.simulationUrl != null && simulationCards.size > 1) {

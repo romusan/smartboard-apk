@@ -43,3 +43,19 @@ def test_closed_curve_generates_unique_mechanism_simulation():
     assert body["kind"] == "threejs"
     assert body["metadata"]["method"] == "PSO-TASS + graph families"
     assert body["metadata"]["simulation_url"].endswith(".html")
+
+
+def test_atomic_interaction_opens_lennard_jones_simulation():
+    payload = {
+        "action": "outline",
+        "subject": "materiales",
+        "session_id": "demo-test",
+        "page_id": "page-1",
+        "recognized_text": "atomic interaction",
+    }
+    response = client.post("/ai/query", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "threejs"
+    assert body["metadata"]["model"] == "lennard-jones"
+    assert body["metadata"]["simulation_url"] == "/static/atomic_energy.html"
