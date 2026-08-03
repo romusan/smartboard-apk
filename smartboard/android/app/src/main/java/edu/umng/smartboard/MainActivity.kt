@@ -51,6 +51,10 @@ fun SmartBoardApp(vm: BoardViewModel) {
     val connected by vm.socket.connected.collectAsState()
     val activeSubject by vm.subject
 
+    LaunchedEffect(Unit) {
+        vm.connect(server, session)
+    }
+
     MaterialTheme {
         Column(Modifier.fillMaxSize().background(Color(0xfff6f7fb)).padding(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
