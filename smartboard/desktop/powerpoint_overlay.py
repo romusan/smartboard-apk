@@ -84,6 +84,8 @@ def presentation_window() -> tuple[int, tuple[int, int, int, int]] | None:
         title = ctypes.create_unicode_buffer(length + 1)
         user32.GetWindowTextW(hwnd, title, length + 1)
         text = title.value.lower()
+        if "smartboard" in text:
+            return True
         supported = (
             "powerpoint" in text or "presentación con diapositivas" in text or "slide show" in text
             or ".pdf" in text or "adobe acrobat" in text or "lector de pdf" in text
