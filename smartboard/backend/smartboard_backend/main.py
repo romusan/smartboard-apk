@@ -12,7 +12,7 @@ from pydantic import ValidationError
 import pypdfium2 as pdfium
 
 from .models import AiRequest, AiResponse, BoardMessage
-from .mechanism_synthesis import synthesize_mechanism
+from .mechanism_synthesis import synthesize_mechanism, upgrade_generated_mechanisms
 from .ollama import query_ollama
 from .store import SessionStore
 from .tutor_adapter import query_tutor_materials
@@ -31,6 +31,7 @@ clients: dict[str, set[WebSocket]] = {}
 
 app.mount("/static", StaticFiles(directory=ROOT / "web"), name="static")
 GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+upgrade_generated_mechanisms(GENERATED_DIR)
 app.mount("/generated", StaticFiles(directory=GENERATED_DIR), name="generated")
 DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
 

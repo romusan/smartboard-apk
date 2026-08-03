@@ -257,13 +257,14 @@ fun BoardCanvas(
                     }
                     if (card.simulationUrl == null) Text(card.content, style = MaterialTheme.typography.bodyMedium)
                     card.simulationUrl?.let { url ->
+                        val tabletUrl = url + if (url.contains("?")) "&tablet=1" else "?tablet=1"
                         AndroidView(
                             factory = { context -> WebView(context).apply {
                                 webViewClient = WebViewClient()
                                 settings.javaScriptEnabled = true
-                                loadUrl(url)
+                                loadUrl(tabletUrl)
                             } },
-                            update = { view -> if (view.url != url) view.loadUrl(url) },
+                            update = { view -> if (view.url != tabletUrl) view.loadUrl(tabletUrl) },
                             modifier = Modifier.fillMaxWidth().weight(1f)
                         )
                     }

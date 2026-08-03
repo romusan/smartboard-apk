@@ -156,6 +156,29 @@ const q=solve(p[6]+t),A=screen(q.A,S,ox,oy),B=screen(q.B,S,ox,oy),C=screen(q.C,S
 if(family!=='fourbar'){{const E0=[q.B[0]+.62*(q.C[0]-q.B[0])-.55*(q.C[1]-q.B[1]),q.B[1]+.62*(q.C[1]-q.B[1])+.55*(q.C[0]-q.B[0])],F0=family==='watt'?[p[0]*.15,-.75]:[p[0]*.82,-.7],E=screen(E0,S,ox,oy),F=screen(F0,S,ox,oy);line(E,F,'#a78bfa',9);line(C,E,'#a78bfa',9);joint(E);joint(F)}}line(A,D,'#64748b',11);line(A,B,'#ef4444',9);line(B,C,'#22c55e',9);line(C,D,'#f59e0b',9);line(B,P,'#c084fc',5);line(C,P,'#c084fc',5);joint(A);joint(B);joint(C);joint(D);joint(P,'#f472b6');label([(A[0]+D[0])/2,(A[1]+D[1])/2],'L1');label([(A[0]+B[0])/2,(A[1]+B[1])/2],'L2');label([(B[0]+C[0])/2,(B[1]+C[1])/2],'L3');label([(C[0]+D[0])/2,(C[1]+D[1])/2],'L4');label(P,'P trazador');t=(t+.0058)%(2*Math.PI);requestAnimationFrame(loop)}}loop();</script></body></html>"""
 
 
+def _upgrade_document(document: str) -> str:
+    document = document.replace("c.width*.72,c.height*.72", "c.width*.94,c.height*.94")
+    document = document.replace("ox=c.width*.43,oy=c.height*.53", "ox=c.width*.50,oy=c.height*.50")
+    document = document.replace(
+        "function setFamily(value){family=value;trail=[]}",
+        "function setFamily(value){family=value;t=0;trail=[]}",
+    )
+    document = document.replace(
+        "const S=Math.min(c.width*.94,c.height*.94)",
+        "const tabletZoom=new URLSearchParams(location.search).has('tablet')?1.32:1,S=Math.min(c.width*.94,c.height*.94)*tabletZoom",
+    )
+    document = document.replace("t+.0058", "t+.0087")
+    return document.replace("18 s", "12 s")
+
+
+def upgrade_generated_mechanisms(generated_dir: Path) -> None:
+    for path in generated_dir.glob("mechanism_*.html"):
+        document = path.read_text(encoding="utf-8")
+        upgraded = _upgrade_document(document)
+        if upgraded != document:
+            path.write_text(upgraded, encoding="utf-8")
+
+
 def synthesize_mechanism(request: AiRequest, generated_dir: Path) -> AiResponse:
     points = _curve_points(request)
     if not _is_closed(points):
@@ -166,11 +189,7 @@ def synthesize_mechanism(request: AiRequest, generated_dir: Path) -> AiResponse:
     candidate, rms = _pso_tass(target, seed)
     preferred_family = "Stephenson III" if _complexity(target) > 0.13 else "Watt I"
     filename = f"mechanism_{digest}.html"
-    document = _html_document(digest, target, candidate, rms)
-    document = document.replace("c.width*.72,c.height*.72", "c.width*.94,c.height*.94")
-    document = document.replace("ox=c.width*.43,oy=c.height*.53", "ox=c.width*.50,oy=c.height*.50")
-    document = document.replace("t+.0058", "t+.0087")
-    document = document.replace("18 s", "12 s")
+    document = _upgrade_document(_html_document(digest, target, candidate, rms))
     (generated_dir / filename).write_text(document, encoding="utf-8")
     params = {name: round(value, 4) for name, value in zip(("bastidor", "manivela", "acoplador", "balancin", "u", "v", "fase"), candidate)}
     return AiResponse(
