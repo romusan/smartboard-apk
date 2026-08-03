@@ -160,14 +160,15 @@ def synthesize_mechanism(request: AiRequest, generated_dir: Path) -> AiResponse:
     digest = hashlib.sha256(json.dumps(target, separators=(",", ":")).encode()).hexdigest()[:12]
     seed = int(digest[:8], 16)
     candidate, rms = _pso_tass(target, seed)
-    family = "Stephenson III de seis barras" if _complexity(target) > 0.13 else "Watt I de seis barras"
+    preferred_family = "Stephenson III" if _complexity(target) > 0.13 else "Watt I"
     filename = f"mechanism_{digest}.html"
     (generated_dir / filename).write_text(_html_document(digest, target, candidate, rms), encoding="utf-8")
     params = {name: round(value, 4) for name, value in zip(("bastidor", "manivela", "acoplador", "balancin", "u", "v", "fase"), candidate)}
     return AiResponse(
         kind="threejs",
         content=(f"Síntesis única {digest}. Se obtuvo una solución de cuatro barras con PSO‑TASS "
-                 f"(RMS normalizado {rms:.4f}) y se habilitaron alternativas por grafos: Watt I y {family}."),
+                 f"(RMS normalizado {rms:.4f}). Alternativas por grafos: Watt I y Stephenson III; "
+                 f"familia sugerida para esta curva: {preferred_family}."),
         metadata={"simulation_url": f"/generated/{filename}", "solution_id": digest, "rms": rms, "fourbar": params,
                   "graph_families": ["fourbar", "wattI", "stephensonIII"], "method": "PSO-TASS + graph families"},
     )
