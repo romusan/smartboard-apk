@@ -12,6 +12,7 @@ from pydantic import ValidationError
 import pypdfium2 as pdfium
 
 from .models import AiRequest, AiResponse, BoardMessage
+from .mechanism_synthesis import synthesize_mechanism
 from .ollama import query_ollama
 from .store import SessionStore
 from .tutor_adapter import query_tutor_materials
@@ -112,6 +113,8 @@ async def ai_query(request: AiRequest) -> dict:
     return result.model_dump()
 
 async def run_ai(request: AiRequest) -> AiResponse:
+    if request.action == "mechanism_synthesis" or request.subject == "mecanismos" and request.strokes:
+        return synthesize_mechanism(request, GENERATED_DIR)
     if AI_PROVIDER in {"tutor", "tutor_materias", "materials"}:
         return await query_tutor_materials(request)
     return await query_ollama(OLLAMA_URL, OLLAMA_MODEL, request)
@@ -134,6 +137,7 @@ async def handle_ai_request(message: BoardMessage) -> BoardMessage:
         png_base64=payload.get("png_base64"),
         recognized_text=recognized_text,
         page_context=page_context,
+        subject=payload.get("subject", "materiales"),
     )
     result = await run_ai(request)
     return BoardMessage(

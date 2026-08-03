@@ -25,7 +25,8 @@ data class AiBoardCard(
     val kind: String = "text",
     val content: String,
     val x: Float = 0.56f,
-    val y: Float = 0.08f
+    val y: Float = 0.08f,
+    val simulationUrl: String? = null
 )
 data class AiRequest(
     val action: String,

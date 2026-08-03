@@ -29,6 +29,7 @@ class BoardViewModel : ViewModel() {
     val aiStatus = mutableStateOf("")
     val backgroundImage = mutableStateOf<ImageBitmap?>(null)
     val documentStatus = mutableStateOf("")
+    val subject = mutableStateOf("materiales")
     var sessionId = "demo"
     private val gson = Gson()
     private val handwritingRecognizer = HandwritingRecognizer()
@@ -48,10 +49,18 @@ class BoardViewModel : ViewModel() {
         socket.connect(server.ifBlank { "http://10.0.2.2:8000" }, sessionId)
     }
 
-    fun addStroke(stroke: Stroke) {
+    fun setSubject(value: String) {
+        subject.value = value
+        aiStatus.value = "Materia activa: ${value.replaceFirstChar { it.uppercase() }}"
+    }
+
+    fun addStroke(stroke: Stroke, allowAutomaticSynthesis: Boolean = true) {
         strokes.add(stroke)
         undone.clear()
         sendStroke("stroke_end", stroke)
+        if (allowAutomaticSynthesis && subject.value == "mecanismos" && isClosedCurve(stroke)) {
+            requestMechanism(stroke)
+        }
     }
 
     fun undo() {
@@ -97,10 +106,29 @@ class BoardViewModel : ViewModel() {
                     "action" to action,
                     "strokes" to selected,
                     "recognized_text" to text,
+                    "subject" to subject.value,
                     "page_context" to buildPageContext(text, selected)
                 )
             )
         }
+    }
+
+    fun requestMechanism(stroke: Stroke? = strokes.lastOrNull()) {
+        if (stroke == null) {
+            aiStatus.value = "Dibuja primero una curva cerrada."
+            return
+        }
+        aiStatus.value = "Sintetizando mecanismos con PSO-TASS y grafos..."
+        send(
+            "ai_request",
+            mapOf(
+                "action" to "mechanism_synthesis",
+                "subject" to "mecanismos",
+                "strokes" to listOf(stroke),
+                "recognized_text" to "curva cerrada",
+                "page_context" to "Trayectoria cerrada dibujada con lápiz para síntesis cinemática."
+            )
+        )
     }
 
     fun requestCard(cardType: String) {
@@ -154,7 +182,7 @@ class BoardViewModel : ViewModel() {
 
     private fun buildPageContext(text: String, selected: List<Stroke>): String {
         val pointCount = selected.sumOf { it.points.size }
-        return "Página enviada desde APK. Pregunta manuscrita OCR: $text. " +
+        return "Materia activa: ${subject.value}. Página enviada desde APK. Pregunta manuscrita OCR: $text. " +
             "Si el OCR es dudoso, interpreta los trazos vectoriales como escritura manuscrita en español. " +
             "Trazos seleccionados: ${selected.size}; puntos: $pointCount. " +
             "Responde para insertar en la pizarra como tarjeta didáctica breve."
@@ -178,7 +206,10 @@ class BoardViewModel : ViewModel() {
             val kind = message.payload["kind"]?.toString() ?: "text"
             if (content.isNotBlank()) {
                 aiCards.clear()
-                aiCards.add(AiBoardCard(kind = kind, content = content))
+                val metadata = message.payload["metadata"] as? Map<*, *>
+                val relativeUrl = metadata?.get("simulation_url")?.toString()
+                val simulationUrl = relativeUrl?.let { if (it.startsWith("http")) it else "${socket.serverBase}$it" }
+                aiCards.add(AiBoardCard(kind = kind, content = content, simulationUrl = simulationUrl))
                 aiStatus.value = "Respuesta IA recibida."
             }
         }
@@ -211,6 +242,19 @@ class BoardViewModel : ViewModel() {
             val strokeIds = message.payload["stroke_ids"] as? List<*> ?: return
             strokes.removeAll { stroke -> strokeIds.any { it?.toString() == stroke.id } }
         }
+    }
+
+    private fun isClosedCurve(stroke: Stroke): Boolean {
+        if (stroke.points.size < 12) return false
+        val first = stroke.points.first()
+        val last = stroke.points.last()
+        val minX = stroke.points.minOf { it.x }
+        val maxX = stroke.points.maxOf { it.x }
+        val minY = stroke.points.minOf { it.y }
+        val maxY = stroke.points.maxOf { it.y }
+        val diagonal = kotlin.math.hypot(maxX - minX, maxY - minY)
+        val gap = kotlin.math.hypot(last.x - first.x, last.y - first.y)
+        return diagonal >= 0.04f && gap <= maxOf(0.035f, 0.22f * diagonal)
     }
 
     @Suppress("UNCHECKED_CAST")

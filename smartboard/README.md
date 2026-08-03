@@ -118,6 +118,24 @@ La respuesta puede ser `text`, `latex`, `svg`, `image`, `threejs` u `openscad`. 
 - Selección por lazo como modo preparado para filtrar trazos.
 - WebSocket estable con reconexión automática y cola en memoria.
 - JSON vectorial con coordenadas normalizadas, grosor, color, presión, tiempo, id y acción.
+
+## Pizarra por materias y síntesis de mecanismos
+
+La barra superior de la APK separa las herramientas de **Materiales**, **Mecanismos** y
+**Dinámica**. En Mecanismos, al cerrar con el lápiz una trayectoria de al menos 12 puntos,
+la APK solicita automáticamente una síntesis al backend Python.
+
+El backend:
+
+- remuestrea y normaliza la curva cerrada;
+- genera un identificador reproducible y una respuesta única por geometría;
+- ajusta un mecanismo de cuatro barras con una versión didáctica rápida de PSO-TASS;
+- ofrece alternativas topológicas de seis barras Watt I y Stephenson III basadas en las
+  familias por grafos del proyecto de investigación FEF-Graph;
+- entrega únicamente resultados, parámetros y una simulación animada HTML; no expone el
+  procedimiento interno de optimización en la interfaz de clase.
+
+La tarjeta de respuesta permite alternar entre cuatro barras, Watt I y Stephenson III.
 - Visor web que reconstruye la pizarra desde trazos.
 - Backend FastAPI con sesiones persistidas en JSONL.
 - Reconocimiento manuscrito en la APK con ML Kit Digital Ink.

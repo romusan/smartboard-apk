@@ -1,6 +1,8 @@
 ﻿package edu.umng.smartboard
 
 import android.os.Bundle
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -22,6 +24,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import edu.umng.smartboard.model.BoardPoint
 import edu.umng.smartboard.model.Stroke
 import edu.umng.smartboard.ui.BoardViewModel
@@ -45,6 +48,7 @@ fun SmartBoardApp(vm: BoardViewModel) {
     var millerPlane by remember { mutableStateOf("112") }
     var elementSymbol by remember { mutableStateOf("Fe") }
     val connected by vm.socket.connected.collectAsState()
+    val activeSubject by vm.subject
 
     MaterialTheme {
         Column(Modifier.fillMaxSize().background(Color(0xfff6f7fb)).padding(10.dp)) {
@@ -57,13 +61,26 @@ fun SmartBoardApp(vm: BoardViewModel) {
                 Button(onClick = vm::newPage) { Text("Nueva página") }
                 AssistChip(onClick = { lasso = !lasso }, label = { Text(if (lasso) "Lazo activo" else "Lazo") })
             }
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                items(Subjects.size) { index ->
+                    val item = Subjects[index]
+                    FilterChip(
+                        selected = activeSubject == item.second,
+                        onClick = { vm.setSubject(item.second) },
+                        label = { Text(item.first) }
+                    )
+                }
+            }
             val documentStatus by vm.documentStatus
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
                 items(AiActions.size) { index ->
                     val item = AiActions[index]
                     Button(onClick = {
-                        if (item.second == "outline") showOutlineMenu = true else vm.askAi(item.second)
+                        if (item.second == "outline" && activeSubject == "materiales") showOutlineMenu = true else vm.askAi(item.second)
                     }) { Text(item.first) }
+                }
+                if (activeSubject == "mecanismos") {
+                    item { Button(onClick = { vm.requestMechanism() }) { Text("Sintetizar mecanismo") } }
                 }
             }
             val aiStatus by vm.aiStatus
@@ -150,6 +167,12 @@ val AiActions = listOf(
     "Resolver" to "solve", "Crear esquema" to "outline", "Generar ejercicio" to "exercise", "Dibujar en 3D" to "draw3d"
 )
 
+val Subjects = listOf(
+    "Materiales" to "materiales",
+    "Mecanismos" to "mecanismos",
+    "Dinámica" to "dinamica"
+)
+
 data class PenColor(val label: String, val hex: String)
 
 val PenColors = listOf(
@@ -181,7 +204,10 @@ fun BoardCanvas(
                     onDragStart = { offset -> activePoints = listOf(offset.toPoint(size)) },
                     onDrag = { change, _ -> activePoints = activePoints + change.position.toPoint(size) },
                     onDragEnd = {
-                        if (activePoints.size > 1) vm.addStroke(vm.strokeFromPoints(activePoints, if (lasso) "#2563eb" else color, if (lasso) 2f else width))
+                        if (activePoints.size > 1) vm.addStroke(
+                            vm.strokeFromPoints(activePoints, if (lasso) "#2563eb" else color, if (lasso) 2f else width),
+                            allowAutomaticSynthesis = !lasso
+                        )
                         activePoints = emptyList()
                     }
                 )
@@ -204,6 +230,17 @@ fun BoardCanvas(
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Respuesta IA supervisada", style = MaterialTheme.typography.titleMedium)
                     Text(card.content, style = MaterialTheme.typography.bodyMedium)
+                    card.simulationUrl?.let { url ->
+                        AndroidView(
+                            factory = { context -> WebView(context).apply {
+                                webViewClient = WebViewClient()
+                                settings.javaScriptEnabled = true
+                                loadUrl(url)
+                            } },
+                            update = { view -> if (view.url != url) view.loadUrl(url) },
+                            modifier = Modifier.fillMaxWidth().height(360.dp)
+                        )
+                    }
                     Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                         TextButton(onClick = vm::clearAiCards) { Text("Quitar") }
                     }

@@ -35,7 +35,7 @@ class BoardMessage(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 class AiRequest(BaseModel):
-    action: Literal["explain", "complete", "correct", "solve", "outline", "exercise", "draw3d"]
+    action: Literal["explain", "complete", "correct", "solve", "outline", "exercise", "draw3d", "mechanism_synthesis"]
     session_id: str
     page_id: str
     selection_id: str | None = None
@@ -43,6 +43,7 @@ class AiRequest(BaseModel):
     png_base64: str | None = None
     recognized_text: str = ""
     page_context: str = ""
+    subject: Literal["materiales", "mecanismos", "dinamica"] = "materiales"
 
 class AiResponse(BaseModel):
     kind: Literal["text", "latex", "svg", "image", "threejs", "openscad"]
