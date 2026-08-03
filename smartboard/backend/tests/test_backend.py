@@ -59,3 +59,16 @@ def test_atomic_interaction_opens_lennard_jones_simulation():
     assert body["kind"] == "threejs"
     assert body["metadata"]["model"] == "lennard-jones"
     assert body["metadata"]["simulation_url"] == "/static/atomic_energy.html"
+
+
+def test_powerpoint_frame_and_overlay_stroke_endpoints():
+    frame = client.post("/powerpoint/frame?session_id=ppt-test", content=b"fake-jpeg", headers={"Content-Type": "image/jpeg"})
+    assert frame.status_code == 200
+    assert frame.json()["image_url"].startswith("/generated/powerpoint_live.jpg?v=")
+    stroke = {
+        "id": "ppt-stroke-1", "page_id": "page-1", "color": "#ef4444", "width": 4,
+        "points": [{"x": 0.1, "y": 0.2, "pressure": 1.0, "t": 1}, {"x": 0.2, "y": 0.3, "pressure": 1.0, "t": 2}],
+    }
+    response = client.post("/overlay/stroke?session_id=ppt-test", json=stroke)
+    assert response.status_code == 200
+    assert response.json()["stroke_id"] == "ppt-stroke-1"

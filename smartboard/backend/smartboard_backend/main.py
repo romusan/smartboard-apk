@@ -47,6 +47,40 @@ async def create_session() -> dict[str, str]:
 async def session_history(session_id: str) -> dict:
     return {"session_id": session_id, "messages": await store.history(session_id)}
 
+
+@app.post("/powerpoint/frame")
+async def powerpoint_frame(request: Request, session_id: str = "demo") -> dict:
+    image_bytes = await request.body()
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="La captura de PowerPoint está vacía.")
+    frame_path = GENERATED_DIR / "powerpoint_live.jpg"
+    frame_path.write_bytes(image_bytes)
+    image_url = f"/generated/{frame_path.name}?v={int(uuid.uuid4().int % 1_000_000_000)}"
+    message = BoardMessage(
+        type="object_update",
+        session_id=session_id,
+        client_id="powerpoint-overlay",
+        payload={"action": "live_background", "image_url": image_url, "source": "powerpoint"},
+    )
+    await broadcast(session_id, message.model_dump())
+    return {"ok": True, "image_url": image_url}
+
+
+@app.post("/overlay/stroke")
+async def overlay_stroke(request: Request, session_id: str = "demo") -> dict:
+    stroke = await request.json()
+    message = BoardMessage(
+        type="stroke_end",
+        session_id=session_id,
+        client_id="powerpoint-overlay",
+        page_id=stroke.get("page_id", "page-1"),
+        stroke_id=stroke.get("id"),
+        payload={"stroke": stroke},
+    )
+    await store.append(message)
+    await broadcast(session_id, message.model_dump())
+    return {"ok": True, "stroke_id": message.stroke_id}
+
 @app.post("/documents/upload")
 async def upload_document(request: Request, session_id: str = "demo", filename: str = "documento.pdf") -> dict:
     if not filename.lower().endswith(".pdf"):

@@ -227,6 +227,14 @@ class BoardViewModel : ViewModel() {
         if (message.type == "object_update" && message.payload["action"] == "document_set") {
             handleDocumentSet(message.payload["document"])
         }
+        if (message.type == "object_update" && message.payload["action"] == "live_background") {
+            val relativeUrl = message.payload["image_url"]?.toString() ?: return
+            val imageUrl = if (relativeUrl.startsWith("http")) relativeUrl else "${socket.serverBase}$relativeUrl"
+            viewModelScope.launch {
+                backgroundImage.value = loadImage(imageUrl)
+                documentStatus.value = "PowerPoint en vivo"
+            }
+        }
         if (message.type == "page_select") {
             val index = (message.payload["page_index"] as? Number)?.toInt() ?: currentPageIndex
             selectDocumentPage(index)
