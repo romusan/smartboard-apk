@@ -3,6 +3,12 @@ const ctx = canvas.getContext('2d');
 const statusEl = document.getElementById('status');
 const sessionEl = document.getElementById('session');
 const aiEl = document.getElementById('ai');
+const simulationPanel = document.getElementById('simulationPanel');
+const mechanismSimulation = document.getElementById('mechanismSimulation');
+document.getElementById('closeSimulation').onclick = () => {
+  simulationPanel.hidden = true;
+  mechanismSimulation.src = 'about:blank';
+};
 let ws = null;
 const strokes = new Map();
 const aiCards = [];
@@ -31,6 +37,8 @@ function resetBoard() {
   strokes.clear();
   aiCards.length = 0;
   aiEl.textContent = '';
+  simulationPanel.hidden = true;
+  mechanismSimulation.src = 'about:blank';
   render();
 }
 
@@ -205,6 +213,11 @@ function applyMessage(msg) {
   if (msg.type === 'ai_response') {
     const html3d = payload.metadata?.html_3d_url ? `\n\nVista 3D: ${location.origin}${payload.metadata.html_3d_url}` : '';
     aiEl.textContent = `${payload.kind || 'text'}\n\n${payload.content || ''}${html3d}`;
+    const simulationUrl = payload.metadata?.simulation_url;
+    if (simulationUrl) {
+      mechanismSimulation.src = simulationUrl;
+      simulationPanel.hidden = false;
+    }
     aiCards.length = 0;
     aiCards.push({
       id: `${msg.timestamp || Date.now()}`,

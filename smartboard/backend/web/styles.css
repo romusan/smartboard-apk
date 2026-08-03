@@ -7,5 +7,9 @@ button { cursor: pointer; background: #60a5fa; font-weight: 700; }
 .fileLabel input { padding: 6px; background: white; color: #111827; }
 textarea { min-height: 140px; resize: vertical; }
 pre { white-space: pre-wrap; background: #020617; padding: 10px; border-radius: 10px; min-height: 120px; }
-main { padding: 20px; }
+main { padding: 20px; position: relative; }
 canvas { width: 100%; height: calc(100vh - 40px); background: white; border-radius: 18px; box-shadow: 0 10px 40px #0002; touch-action: none; }
+#simulationPanel { position: absolute; inset: 20px; z-index: 10; padding: 12px; background: #07111f; border-radius: 18px; box-shadow: 0 12px 50px #0008; }
+#simulationPanel:not([hidden]) { display: flex; flex-direction: column; gap: 10px; }
+#mechanismSimulation { flex: 1; width: 100%; border: 0; border-radius: 12px; background: #07111f; }
+#closeSimulation { align-self: flex-end; background: #f59e0b; }

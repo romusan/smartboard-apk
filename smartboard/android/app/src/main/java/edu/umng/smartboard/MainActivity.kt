@@ -221,15 +221,19 @@ fun BoardCanvas(
         }
         vm.aiCards.forEach { card ->
             Card(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(18.dp)
-                    .widthIn(min = 280.dp, max = 420.dp),
+                modifier = if (card.simulationUrl != null) {
+                    Modifier.align(Alignment.Center).fillMaxSize().padding(12.dp)
+                } else {
+                    Modifier.align(Alignment.TopEnd).padding(18.dp).widthIn(min = 280.dp, max = 420.dp)
+                },
                 colors = CardDefaults.cardColors(containerColor = Color(0xfffffbeb))
             ) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Respuesta IA supervisada", style = MaterialTheme.typography.titleMedium)
-                    Text(card.content, style = MaterialTheme.typography.bodyMedium)
+                Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (card.simulationUrl != null) "Simulación del mecanismo" else "Respuesta IA supervisada", style = MaterialTheme.typography.titleMedium)
+                        TextButton(onClick = vm::clearAiCards) { Text("Cerrar") }
+                    }
+                    if (card.simulationUrl == null) Text(card.content, style = MaterialTheme.typography.bodyMedium)
                     card.simulationUrl?.let { url ->
                         AndroidView(
                             factory = { context -> WebView(context).apply {
@@ -238,11 +242,8 @@ fun BoardCanvas(
                                 loadUrl(url)
                             } },
                             update = { view -> if (view.url != url) view.loadUrl(url) },
-                            modifier = Modifier.fillMaxWidth().height(360.dp)
+                            modifier = Modifier.fillMaxWidth().weight(1f)
                         )
-                    }
-                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                        TextButton(onClick = vm::clearAiCards) { Text("Quitar") }
                     }
                 }
             }
