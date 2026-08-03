@@ -3,6 +3,7 @@
 import android.os.Bundle
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebSettings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -262,6 +263,8 @@ fun BoardCanvas(
                             factory = { context -> WebView(context).apply {
                                 webViewClient = WebViewClient()
                                 settings.javaScriptEnabled = true
+                                settings.cacheMode = WebSettings.LOAD_NO_CACHE
+                                clearCache(true)
                                 loadUrl(tabletUrl)
                             } },
                             update = { view -> if (view.url != tabletUrl) view.loadUrl(tabletUrl) },

@@ -37,7 +37,7 @@ DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
 
 @app.get("/")
 async def index() -> FileResponse:
-    return FileResponse(ROOT / "web" / "index.html")
+    return FileResponse(ROOT / "web" / "index.html", headers={"Cache-Control": "no-store, max-age=0"})
 
 @app.post("/sessions")
 async def create_session() -> dict[str, str]:
