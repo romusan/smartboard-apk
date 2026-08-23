@@ -117,6 +117,7 @@ private fun ColumnScope.ResultScreen(solution: FourBarSolution, onNew: () -> Uni
                 HorizontalDivider(color = Color.White.copy(alpha = .15f))
                 Text("Punto trazador r = ${fmt(d.couplerRadius)} mm")
                 Text(solution.grashof, color = Cyan)
+                Text(solution.quality, color = if (solution.rmsError <= 5.0) Color(0xFF58E6A9) else Color(0xFFFFC857), fontWeight = FontWeight.Bold)
                 Text("Error RMS: ${fmt(solution.rmsError)} mm")
                 Text("Error máximo: ${fmt(solution.maxError)} mm")
                 Spacer(Modifier.weight(1f))
@@ -151,4 +152,3 @@ private fun MechanismCanvas(solution: FourBarSolution, frame: Int, modifier: Mod
         drawCircle(Magenta, 11f, map(p.p))
     }
 }
-

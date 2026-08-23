@@ -7,18 +7,18 @@ import kotlin.math.*
 import kotlin.random.Random
 
 class FourBarSynthesizer(
-    private val particles: Int = 42,
-    private val iterations: Int = 150,
-    private val samples: Int = 64
+    private val particles: Int = 68,
+    private val iterations: Int = 280,
+    private val samples: Int = 72
 ) : MechanismSynthesizer<FourBarSolution> {
-    private val lower = doubleArrayOf(50.0, 15.0, 50.0, 30.0, 15.0, -PI)
-    private val upper = doubleArrayOf(120.0, 55.0, 110.0, 80.0, 55.0, PI)
+    private val lower = doubleArrayOf(35.0, 10.0, 25.0, 20.0, 3.0, -PI)
+    private val upper = doubleArrayOf(150.0, 85.0, 150.0, 120.0, 120.0, PI)
 
     override suspend fun synthesize(curve: List<Vec2>, onProgress: (Float) -> Unit): FourBarSolution {
         require(curve.size >= 8) { "La curva necesita al menos 8 puntos" }
         val target = prepareCurve(curve, samples)
         val rng = Random(target.fold(17) { a, p -> 31 * a + (p.x * 10 + p.y).roundToInt() })
-        val pos = Array(particles) { DoubleArray(6) { j -> rng.nextDouble(lower[j], upper[j]) } }
+        val pos = Array(particles) { randomFeasible(rng) }
         val vel = Array(particles) { DoubleArray(6) }
         val best = Array(particles) { pos[it].copyOf() }
         val bestScore = DoubleArray(particles) { evaluate(best[it], target).score }
@@ -49,41 +49,76 @@ class FourBarSynthesizer(
             onProgress((step + 1f) / iterations)
             yield()
         }
-        return buildSolution(global, target)
+        // PSO finds the basin; deterministic coordinate search removes its residual error.
+        var polished = global.copyOf()
+        var polishedScore = evaluate(polished, target, shiftStep = 1).score
+        var steps = DoubleArray(6) { j -> (upper[j] - lower[j]) * if (j == 5) 0.025 else 0.035 }
+        repeat(11) {
+            for (j in 0..5) for (direction in doubleArrayOf(-1.0, 1.0)) {
+                val candidate = polished.copyOf()
+                candidate[j] = (candidate[j] + direction * steps[j]).coerceIn(lower[j], upper[j])
+                val score = evaluate(candidate, target, shiftStep = 1).score
+                if (score < polishedScore) { polished = candidate; polishedScore = score }
+            }
+            steps = DoubleArray(6) { j -> steps[j] * 0.62 }
+            onProgress(1f)
+            yield()
+        }
+        return buildSolution(polished, target)
     }
 
-    private data class Evaluation(val score: Double, val aligned: List<Vec2> = emptyList(), val shift: Int = 0, val angle: Double = 0.0, val translation: Vec2 = Vec2(0.0, 0.0))
+    private data class Evaluation(val score: Double, val aligned: List<Vec2> = emptyList(), val shift: Int = 0, val reversed: Boolean = false, val angle: Double = 0.0, val translation: Vec2 = Vec2(0.0, 0.0))
 
-    private fun evaluate(x: DoubleArray, target: List<Vec2>): Evaluation {
+    private fun randomFeasible(rng: Random): DoubleArray {
+        repeat(250) {
+            val x = DoubleArray(6) { j -> rng.nextDouble(lower[j], upper[j]) }
+            if (mechanismPoses(FourBarDesign(x[0], x[1], x[2], x[3], x[4], x[5]), 24) != null) return x
+        }
+        // Guaranteed Grashof crank-rocker fallback.
+        return doubleArrayOf(100.0, 30.0, 85.0, 70.0, rng.nextDouble(10.0, 100.0), rng.nextDouble(-PI, PI))
+    }
+
+    private fun evaluate(x: DoubleArray, target: List<Vec2>, shiftStep: Int = 2): Evaluation {
         val design = FourBarDesign(x[0], x[1], x[2], x[3], x[4], x[5])
         val poses = mechanismPoses(design, target.size) ?: return Evaluation(1e8)
         val raw = poses.map { it.p }
         var answer = Evaluation(1e8)
-        for (shift in target.indices step 2) {
-            val shifted = List(target.size) { raw[(it + shift) % raw.size] }
-            val fit = align(shifted, target)
-            val errors = fit.first.zip(target) { a, b -> a.distance(b) }
-            val rms = sqrt(errors.sumOf { it * it } / errors.size)
-            val maxError = errors.max()
-            val singular = poses.count { abs(cross(it.c - it.b, it.d - it.c)) < 25.0 }.toDouble() / poses.size
-            val complexity = .002 * x.take(5).sum()
-            val score = rms + .30 * maxError + 10.0 * singular + complexity
-            if (score < answer.score) answer = Evaluation(score, fit.first, shift, fit.second, fit.third)
+        for (reverse in listOf(false, true)) {
+            val oriented = if (reverse) raw.reversed() else raw
+            for (shift in target.indices step shiftStep) {
+                val shifted = List(target.size) { oriented[(it + shift) % oriented.size] }
+                val fit = align(shifted, target)
+                val errors = fit.first.zip(target) { a, b -> a.distance(b) }
+                val rms = sqrt(errors.sumOf { it * it } / errors.size)
+                val maxError = errors.max()
+                val singular = poses.count { abs(cross(it.c - it.b, it.d - it.c)) < 25.0 }.toDouble() / poses.size
+                val score = rms + .22 * maxError + 8.0 * singular
+                if (score < answer.score) answer = Evaluation(score, fit.first, shift, reverse, fit.second, fit.third)
+            }
         }
         return answer
     }
 
     private fun buildSolution(x: DoubleArray, target: List<Vec2>): FourBarSolution {
         val d = FourBarDesign(x[0], x[1], x[2], x[3], x[4], x[5])
-        val evaluation = evaluate(x, target)
-        val rawPoses = mechanismPoses(d, 180)!!
+        val evaluation = evaluate(x, target, shiftStep = 1)
+        var rawPoses = mechanismPoses(d, 180)!!
+        if (evaluation.reversed) rawPoses = rawPoses.reversed()
+        rawPoses = List(rawPoses.size) { rawPoses[(it + evaluation.shift * rawPoses.size / target.size) % rawPoses.size] }
         val alignedPoses = rawPoses.map { pose ->
             FourBarPose(transform(pose.a, evaluation.angle, evaluation.translation), transform(pose.b, evaluation.angle, evaluation.translation), transform(pose.c, evaluation.angle, evaluation.translation), transform(pose.d, evaluation.angle, evaluation.translation), transform(pose.p, evaluation.angle, evaluation.translation))
         }
         val errors = evaluation.aligned.zip(target) { a, b -> a.distance(b) }
         val links = listOf(d.l1, d.l2, d.l3, d.l4).sorted()
         val grashof = if (links.first() + links.last() <= links[1] + links[2]) "Grashof: rotación completa" else "No Grashof: movimiento oscilante"
-        return FourBarSolution(d, target, evaluation.aligned, alignedPoses, sqrt(errors.sumOf { it * it } / errors.size), errors.max(), grashof)
+        val rms = sqrt(errors.sumOf { it * it } / errors.size)
+        val quality = when {
+            rms <= 2.5 -> "Ajuste excelente"
+            rms <= 5.0 -> "Ajuste bueno"
+            rms <= 9.0 -> "Ajuste aproximado"
+            else -> "La curva requiere más eslabones"
+        }
+        return FourBarSolution(d, target, evaluation.aligned, alignedPoses, rms, errors.max(), grashof, quality)
     }
 
     fun mechanismPoses(d: FourBarDesign, count: Int): List<FourBarPose>? {
@@ -93,14 +128,14 @@ class FourBarSynthesizer(
             val theta = 2.0 * PI * i / count
             val a = Vec2(0.0, 0.0); val fixed = Vec2(d.l1, 0.0)
             val b = Vec2(d.l2 * cos(theta), d.l2 * sin(theta))
-            val intersections = circleIntersections(b, d.l3, fixed, d.l4) ?: return@repeat
+            val intersections = circleIntersections(b, d.l3, fixed, d.l4) ?: return null
             val c = previous?.let { p -> intersections.minBy { it.distance(p) } } ?: intersections.maxBy { it.y }
             previous = c
             val u = (c - b) * (1.0 / d.l3); val v = Vec2(-u.y, u.x)
             val p = b + u * (d.couplerRadius * cos(d.couplerAngle)) + v * (d.couplerRadius * sin(d.couplerAngle))
             result += FourBarPose(a, b, c, fixed, p)
         }
-        return result.takeIf { it.size >= count * 0.85 }
+        return result.takeIf { it.size == count }
     }
 
     private fun circleIntersections(p0: Vec2, r0: Double, p1: Vec2, r1: Double): List<Vec2>? {

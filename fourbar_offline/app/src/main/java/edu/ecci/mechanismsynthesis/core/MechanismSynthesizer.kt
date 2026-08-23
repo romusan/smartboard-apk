@@ -18,6 +18,6 @@ data class FourBarSolution(
     val poses: List<FourBarPose>,
     val rmsError: Double,
     val maxError: Double,
-    val grashof: String
+    val grashof: String,
+    val quality: String
 )
-
