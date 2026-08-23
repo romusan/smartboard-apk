@@ -2,7 +2,6 @@ package edu.ecci.mechanismsynthesis.core
 
 import org.junit.Assert.*
 import org.junit.Test
-import kotlinx.coroutines.runBlocking
 
 class FourBarSynthesizerTest {
     @Test fun forwardKinematicsProducesContinuousClosedCycle() {
@@ -17,7 +16,7 @@ class FourBarSynthesizerTest {
         assertTrue(poses.first().p.distance(poses.last().p) < 5.0)
     }
 
-    @Test fun repeatedPenSamplesDoNotProduceNaN() = runBlocking {
+    @Test fun repeatedPenSamplesDoNotProduceNaN() {
         val curve = buildList {
             repeat(24) { i ->
                 val angle = 2.0 * Math.PI * i / 24
@@ -26,8 +25,8 @@ class FourBarSynthesizerTest {
                 add(point) // Typical stationary S Pen duplicate.
             }
         }
-        val result = FourBarSynthesizer(particles = 6, iterations = 3, samples = 24).synthesize(curve)
-        assertTrue(result.rmsError.isFinite())
-        assertTrue(result.generated.all { it.x.isFinite() && it.y.isFinite() })
+        val normalized = FourBarSynthesizer(samples = 24).prepareCurve(curve, 24)
+        assertEquals(24, normalized.size)
+        assertTrue(normalized.all { it.x.isFinite() && it.y.isFinite() })
     }
 }

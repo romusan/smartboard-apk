@@ -16,7 +16,7 @@ class FourBarSynthesizer(
 
     override suspend fun synthesize(curve: List<Vec2>, onProgress: (Float) -> Unit): FourBarSolution {
         require(curve.size >= 8) { "La curva necesita al menos 8 puntos" }
-        val target = normalizeAndResample(curve, samples)
+        val target = prepareCurve(curve, samples)
         val rng = Random(target.fold(17) { a, p -> 31 * a + (p.x * 10 + p.y).roundToInt() })
         val pos = Array(particles) { DoubleArray(6) { j -> rng.nextDouble(lower[j], upper[j]) } }
         val vel = Array(particles) { DoubleArray(6) }
@@ -123,7 +123,7 @@ class FourBarSynthesizer(
         return Triple(source.map { transform(it, angle, translation) }, angle, translation)
     }
 
-    private fun normalizeAndResample(points: List<Vec2>, n: Int): List<Vec2> {
+    internal fun prepareCurve(points: List<Vec2>, n: Int = samples): List<Vec2> {
         // Android can deliver repeated samples while the S Pen is momentarily still.
         // Removing zero-length segments prevents 0/0 during arc-length interpolation.
         val clean = ArrayList<Vec2>(points.size)
