@@ -124,20 +124,30 @@ class FourBarSynthesizer(
     }
 
     private fun normalizeAndResample(points: List<Vec2>, n: Int): List<Vec2> {
-        val closed = if (points.first().distance(points.last()) < 2.0) points else points + points.first()
+        // Android can deliver repeated samples while the S Pen is momentarily still.
+        // Removing zero-length segments prevents 0/0 during arc-length interpolation.
+        val clean = ArrayList<Vec2>(points.size)
+        points.filter { it.x.isFinite() && it.y.isFinite() }.forEach { point ->
+            if (clean.isEmpty() || clean.last().distance(point) > 0.01) clean += point
+        }
+        require(clean.size >= 8) { "La curva necesita más puntos distintos" }
+        val closed = if (clean.first().distance(clean.last()) < 2.0) clean else clean + clean.first()
         val lengths = closed.zipWithNext { a, b -> a.distance(b) }
         val total = lengths.sum(); require(total > 20.0) { "Dibuja una curva más grande" }
         val sampled = (0 until n).map { k ->
             val distance = total * k / n; var accumulated = 0.0; var index = 0
             while (index < lengths.lastIndex && accumulated + lengths[index] < distance) { accumulated += lengths[index]; index++ }
-            val t = ((distance - accumulated) / lengths[index]).coerceIn(0.0, 1.0)
+            val segmentLength = lengths[index]
+            val t = if (segmentLength > 1e-9) ((distance - accumulated) / segmentLength).coerceIn(0.0, 1.0) else 0.0
             closed[index] + (closed[index + 1] - closed[index]) * t
         }
         val center = centroid(sampled)
         val width = sampled.maxOf { it.x } - sampled.minOf { it.x }
         val height = sampled.maxOf { it.y } - sampled.minOf { it.y }
         val scale = 100.0 / max(width, height).coerceAtLeast(1.0)
-        return sampled.map { (it - center) * scale }
+        return sampled.map { (it - center) * scale }.also { normalized ->
+            require(normalized.all { it.x.isFinite() && it.y.isFinite() }) { "La curva contiene puntos no válidos" }
+        }
     }
 
     private fun centroid(points: List<Vec2>) = Vec2(points.sumOf { it.x } / points.size, points.sumOf { it.y } / points.size)
@@ -145,4 +155,3 @@ class FourBarSynthesizer(
     private fun transform(p: Vec2, a: Double, t: Vec2) = rotate(p, a) + t
     private fun cross(a: Vec2, b: Vec2) = a.x * b.y - a.y * b.x
 }
-
