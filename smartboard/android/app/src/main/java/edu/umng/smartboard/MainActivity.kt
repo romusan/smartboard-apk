@@ -270,7 +270,10 @@ fun BoardCanvas(
             }
         ) {
             vm.backgroundImage.value?.let { image ->
-                drawImage(image, dstSize = androidx.compose.ui.unit.IntSize(size.width, size.height))
+                val scale = minOf(size.width.toFloat() / image.width, size.height.toFloat() / image.height)
+                val imageSize = IntSize((image.width * scale).toInt(), (image.height * scale).toInt())
+                drawImage(image, dstSize = imageSize, dstOffset = androidx.compose.ui.unit.IntOffset(
+                    (size.width - imageSize.width) / 2, (size.height - imageSize.height) / 2))
             }
             vm.strokes.forEach { drawVectorStroke(it, size) }
             drawVectorStroke(Stroke(color = color, width = width, points = activePoints), size)
