@@ -12,6 +12,7 @@ import unicodedata
 from pathlib import Path
 
 from .models import AiRequest, AiResponse
+from .gemini_primary import answer_with_gemini
 from .atomic_cards import generate_atom_structure_card, generate_quantum_numbers_card
 from .bcc_card import generate_bcc_card, generate_bcc_3d_html
 from .element_cards import detect_element_query, generate_element_energy_card
@@ -686,7 +687,7 @@ def _friendly_ai_failure(exc: Exception, request: AiRequest, corrected_text: str
     )
 
 
-def _ask_tutor_sync(request: AiRequest) -> AiResponse:
+def _ask_tutor_fallback_sync(request: AiRequest) -> AiResponse:
     corrected_text, corrections = autocorrect_materials_text(request.recognized_text)
     question = _build_question(request)
     rag_question = _build_rag_question(request, corrected_text)
@@ -791,6 +792,19 @@ def _ask_tutor_sync(request: AiRequest) -> AiResponse:
             **supervisor_metadata,
         },
     )
+
+
+def _ask_tutor_sync(request: AiRequest) -> AiResponse:
+    # Explicit diagram tools keep their deterministic renderers.
+    if request.action in {"outline", "draw3d"}:
+        return _ask_tutor_fallback_sync(request)
+    try:
+        return answer_with_gemini(request, _build_question(request))
+    except Exception as exc:
+        response = _ask_tutor_fallback_sync(request)
+        response.metadata.update({"primary_provider": "gemini", "fallback_used": True,
+                                  "primary_error": type(exc).__name__})
+        return response
 
 
 async def query_tutor_materials(request: AiRequest) -> AiResponse:

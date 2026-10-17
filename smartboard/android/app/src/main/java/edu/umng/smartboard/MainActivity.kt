@@ -16,6 +16,9 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -74,7 +77,7 @@ fun SmartBoardApp(vm: BoardViewModel) {
             Column(Modifier.fillMaxSize()) {
                 if (!focusMode) {
                     Row(
-                        Modifier.fillMaxWidth().background(Color(0xfff6f7fb))
+                        Modifier.fillMaxWidth().padding(end = 160.dp).background(Color(0xfff6f7fb))
                             .horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -123,7 +126,6 @@ fun SmartBoardApp(vm: BoardViewModel) {
                             Text(documentStatus, style = MaterialTheme.typography.labelSmall)
                             TextButton(onClick = vm::nextDocumentPage) { Text("PDF ▶") }
                         }
-                        TextButton(onClick = { focusMode = true }) { Text("Solo pizarra") }
                     }
                 }
                 BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
@@ -133,9 +135,30 @@ fun SmartBoardApp(vm: BoardViewModel) {
                         modifier = Modifier.width(pageWidth).height(pageWidth / 1.6f))
                 }
             }
-            if (focusMode) {
-                FilledTonalButton(onClick = { focusMode = false }, modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) { Text("Menú") }
+            Column(Modifier.align(Alignment.TopEnd).padding(4.dp).width(150.dp),
+                horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                FilledTonalButton(onClick = { focusMode = !focusMode },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
+                    Text(if (focusMode) "Menú" else "Solo pizarra")
+                }
+                Button(onClick = { vm.askAi("explain") }, modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)) { Text("Preguntar a la IA") }
+            }
+            Surface(modifier = Modifier.align(Alignment.CenterStart).padding(4.dp),
+                shape = RoundedCornerShape(24.dp), color = Color(0xeef6f7fb), tonalElevation = 2.dp) {
+                Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState()).padding(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    PenColors.forEach { item ->
+                        FilledTonalButton(onClick = { color = item.hex; lasso = false },
+                            modifier = Modifier.size(40.dp).semantics { contentDescription = "Lápiz ${item.label}" },
+                            contentPadding = PaddingValues(0.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = Color(android.graphics.Color.parseColor(item.hex)),
+                                contentColor = if (item.hex in listOf("#111111", "#7c3aed", "#dc2626", "#2563eb")) Color.White else Color.Black)) {
+                            Text(if (color == item.hex && !lasso) "✓" else "")
+                        }
+                    }
+                }
             }
         }
         if (menu == "connection") {
