@@ -1,3 +1,10 @@
+const toggleControls = document.getElementById('toggleControls');
+toggleControls.onclick = () => {
+  const expanded = document.body.classList.toggle('controls-open');
+  toggleControls.setAttribute('aria-expanded', String(expanded));
+  toggleControls.textContent = expanded ? '✕ Cerrar menú' : '☰ Menú';
+};
+
 ﻿const canvas = document.getElementById('board');
 const ctx = canvas.getContext('2d');
 const statusEl = document.getElementById('status');

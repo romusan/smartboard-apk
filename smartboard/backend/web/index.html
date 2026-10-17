@@ -4,10 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SmartBoard Viewer</title>
-  <link rel="stylesheet" href="/static/styles.css?v=5" />
+  <link rel="stylesheet" href="/static/styles.css?v=6" />
 </head>
 <body>
-  <aside>
+  <button id="toggleControls" aria-expanded="false" aria-controls="controls">☰ Menú</button>
+  <aside id="controls">
     <h1>SmartBoard</h1>
     <label>Sesión <input id="session" value="demo" /></label>
     <button id="connect">Conectar</button>
@@ -30,6 +31,6 @@
       <iframe id="mechanismSimulation" title="Simulación del mecanismo"></iframe>
     </section>
   </main>
-  <script src="/static/app.js?v=5"></script>
+  <script src="/static/app.js?v=6"></script>
 </body>
 </html>

@@ -8,10 +8,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +27,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.viewinterop.AndroidView
 import edu.umng.smartboard.model.BoardPoint
 import edu.umng.smartboard.model.Stroke
@@ -34,20 +40,28 @@ class MainActivity : ComponentActivity() {
     private val vm: BoardViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
         setContent { SmartBoardApp(vm) }
     }
 }
 
 @Composable
 fun SmartBoardApp(vm: BoardViewModel) {
-    var server by remember { mutableStateOf("http://127.0.0.1:8000") }
-    var session by remember { mutableStateOf("demo") }
+    var server by rememberSaveable { mutableStateOf("http://127.0.0.1:8000") }
+    var session by rememberSaveable { mutableStateOf("demo") }
     var color by remember { mutableStateOf("#111111") }
     var width by remember { mutableStateOf(4f) }
     var lasso by remember { mutableStateOf(false) }
     var showOutlineMenu by remember { mutableStateOf(false) }
     var millerPlane by remember { mutableStateOf("112") }
     var elementSymbol by remember { mutableStateOf("Fe") }
+    var menu by remember { mutableStateOf<String?>(null) }
+    var focusMode by rememberSaveable { mutableStateOf(false) }
+    var confirmErase by remember { mutableStateOf(false) }
     val connected by vm.socket.connected.collectAsState()
     val activeSubject by vm.subject
 
@@ -56,63 +70,98 @@ fun SmartBoardApp(vm: BoardViewModel) {
     }
 
     MaterialTheme {
-        Column(Modifier.fillMaxSize().background(Color(0xfff6f7fb)).padding(10.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(server, { server = it }, label = { Text("Servidor/IP o QR") }, modifier = Modifier.width(260.dp))
-                OutlinedTextField(session, { session = it }, label = { Text("Sesión") }, modifier = Modifier.width(140.dp))
-                Button(onClick = { vm.connect(server, session) }) { Text(if (connected) "Conectado" else "Conectar") }
-                Button(onClick = vm::undo) { Text("Deshacer") }
-                Button(onClick = vm::eraseBoard) { Text("Borrar") }
-                Button(onClick = vm::newPage) { Text("Nueva página") }
-                AssistChip(onClick = { lasso = !lasso }, label = { Text(if (lasso) "Lazo activo" else "Lazo") })
-            }
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                items(Subjects.size) { index ->
-                    val item = Subjects[index]
-                    FilterChip(
-                        selected = activeSubject == item.second,
-                        onClick = { vm.setSubject(item.second) },
-                        label = { Text(item.first) }
-                    )
+        Box(Modifier.fillMaxSize().background(Color(0xffe2e8f0)).windowInsetsPadding(WindowInsets.displayCutout)) {
+            Column(Modifier.fillMaxSize()) {
+                if (!focusMode) {
+                    Row(
+                        Modifier.fillMaxWidth().background(Color(0xfff6f7fb))
+                            .horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box {
+                            TextButton(onClick = { menu = "tools" }) { Text("Herramientas") }
+                            DropdownMenu(expanded = menu == "tools", onDismissRequest = { menu = null }) {
+                                DropdownMenuItem(text = { Text(if (lasso) "✓ Lazo" else "Lazo") }, onClick = { lasso = !lasso; menu = null })
+                                PenColors.forEach { item ->
+                                    DropdownMenuItem(text = { Text((if (item.hex == color) "✓ " else "") + item.label, color = Color(android.graphics.Color.parseColor(item.hex))) }, onClick = { color = item.hex; lasso = false; menu = null })
+                                }
+                                HorizontalDivider()
+                                listOf(2f, 4f, 7f).forEach { value ->
+                                    DropdownMenuItem(text = { Text("${if (width == value) "✓ " else ""}Grosor ${value.toInt()}") }, onClick = { width = value; menu = null })
+                                }
+                                HorizontalDivider()
+                                DropdownMenuItem(text = { Text("Nueva página") }, onClick = { vm.newPage(); menu = null })
+                                DropdownMenuItem(text = { Text("Borrar pizarra") }, onClick = { confirmErase = true; menu = null })
+                            }
+                        }
+                        TextButton(onClick = vm::undo) { Text("Deshacer") }
+                        Box {
+                            TextButton(onClick = { menu = "subject" }) { Text(Subjects.first { it.second == activeSubject }.first) }
+                            DropdownMenu(expanded = menu == "subject", onDismissRequest = { menu = null }) {
+                                Subjects.forEach { item ->
+                                    DropdownMenuItem(text = { Text(item.first) }, onClick = { vm.setSubject(item.second); menu = null })
+                                }
+                            }
+                        }
+                        Box {
+                            TextButton(onClick = { menu = "ai" }) { Text("IA / Esquemas") }
+                            DropdownMenu(expanded = menu == "ai", onDismissRequest = { menu = null }) {
+                                AiActions.forEach { item ->
+                                    DropdownMenuItem(text = { Text(item.first) }, onClick = {
+                                        menu = null
+                                        if (item.second == "outline" && activeSubject == "materiales") showOutlineMenu = true else vm.askAi(item.second)
+                                    })
+                                }
+                                if (activeSubject == "mecanismos") DropdownMenuItem(text = { Text("Sintetizar mecanismo") }, onClick = { vm.requestMechanism(); menu = null })
+                            }
+                        }
+                        TextButton(onClick = { menu = "connection" }) { Text(if (connected) "● Conexión" else "○ Conectar") }
+                        val documentStatus by vm.documentStatus
+                        if (documentStatus.isNotBlank()) {
+                            TextButton(onClick = vm::previousDocumentPage) { Text("◀ PDF") }
+                            Text(documentStatus, style = MaterialTheme.typography.labelSmall)
+                            TextButton(onClick = vm::nextDocumentPage) { Text("PDF ▶") }
+                        }
+                        TextButton(onClick = { focusMode = true }) { Text("Solo pizarra") }
+                    }
+                }
+                BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                    // Match the projection's 16:10 page so normalized strokes keep their shape.
+                    val pageWidth = minOf(maxWidth, maxHeight * 1.6f)
+                    BoardCanvas(vm = vm, color = color, width = width, lasso = lasso,
+                        modifier = Modifier.width(pageWidth).height(pageWidth / 1.6f))
                 }
             }
-            val documentStatus by vm.documentStatus
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
-                items(AiActions.size) { index ->
-                    val item = AiActions[index]
-                    Button(onClick = {
-                        if (item.second == "outline" && activeSubject == "materiales") showOutlineMenu = true else vm.askAi(item.second)
-                    }) { Text(item.first) }
-                }
-                if (activeSubject == "mecanismos") {
-                    item { Button(onClick = { vm.requestMechanism() }) { Text("Sintetizar mecanismo") } }
-                }
+            if (focusMode) {
+                FilledTonalButton(onClick = { focusMode = false }, modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) { Text("Menú") }
             }
+        }
+        if (menu == "connection") {
             val aiStatus by vm.aiStatus
-            val recognizedText by vm.recognizedText
-            if (aiStatus.isNotBlank() || recognizedText.isNotBlank()) {
-                Text(
-                    text = aiStatus.ifBlank { "Leí: $recognizedText" },
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-            }
-            BoardCanvas(
-                vm = vm,
-                color = color,
-                onColorChange = { color = it },
-                width = width,
-                lasso = lasso,
-                documentStatus = documentStatus,
-                modifier = Modifier.fillMaxSize()
-            )
+            AlertDialog(onDismissRequest = { menu = null }, title = { Text("Conexión y estado") }, text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(server, { server = it }, label = { Text("Servidor/IP") }, singleLine = true)
+                    OutlinedTextField(session, { session = it }, label = { Text("Sesión") }, singleLine = true)
+                    Text(if (connected) "Conectado" else "Desconectado")
+                    if (aiStatus.isNotBlank()) Text(aiStatus)
+                }
+            }, confirmButton = { TextButton(onClick = { vm.connect(server, session); menu = null }) { Text("Conectar") } },
+                dismissButton = { TextButton(onClick = { menu = null }) { Text("Cerrar") } })
+        }
+        if (confirmErase) {
+            AlertDialog(onDismissRequest = { confirmErase = false }, title = { Text("¿Borrar pizarra?") },
+                text = { Text("Se eliminarán los trazos y las respuestas de esta pizarra.") },
+                confirmButton = { TextButton(onClick = { vm.eraseBoard(); confirmErase = false }) { Text("Borrar") } },
+                dismissButton = { TextButton(onClick = { confirmErase = false }) { Text("Cancelar") } })
         }
         if (showOutlineMenu) {
             AlertDialog(
                 onDismissRequest = { showOutlineMenu = false },
                 title = { Text("Crear esquema") },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("Dibujos y tarjetas paramétricas")
                         OutlinedTextField(
                             value = millerPlane,
@@ -197,10 +246,8 @@ val PenColors = listOf(
 fun BoardCanvas(
     vm: BoardViewModel,
     color: String,
-    onColorChange: (String) -> Unit,
     width: Float,
     lasso: Boolean,
-    documentStatus: String,
     modifier: Modifier = Modifier
 ) {
     var size by remember { mutableStateOf(IntSize(1, 1)) }
@@ -211,6 +258,7 @@ fun BoardCanvas(
                 detectDragGestures(
                     onDragStart = { offset -> activePoints = listOf(offset.toPoint(size)) },
                     onDrag = { change, _ -> activePoints = activePoints + change.position.toPoint(size) },
+                    onDragCancel = { activePoints = emptyList() },
                     onDragEnd = {
                         if (activePoints.size > 1) vm.addStroke(
                             vm.strokeFromPoints(activePoints, if (lasso) "#2563eb" else color, if (lasso) 2f else width),
@@ -243,7 +291,7 @@ fun BoardCanvas(
                 },
                 colors = CardDefaults.cardColors(containerColor = Color(0xfffffbeb))
             ) {
-                Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column((if (card.simulationUrl != null) Modifier.fillMaxSize() else Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             if (card.simulationUrl != null) "Simulación interactiva ${simulationIndex + 1} de ${simulationCards.size}" else "Respuesta IA supervisada",
@@ -281,46 +329,7 @@ fun BoardCanvas(
                 }
             }
         }
-        Column(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .padding(start = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            PenColors.forEach { item ->
-                FilledTonalButton(
-                    onClick = { onColorChange(item.hex) },
-                    modifier = Modifier.width(82.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = Color(android.graphics.Color.parseColor(item.hex)),
-                        contentColor = if (item.hex in listOf("#111111", "#7c3aed", "#dc2626", "#2563eb")) Color.White else Color.Black
-                    ),
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)
-                ) {
-                    Text(if (item.hex == color) "✓ ${item.label}" else item.label)
-                }
-            }
-        }
-        if (documentStatus.isNotBlank()) {
-            Card(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 10.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xeeffffff))
-            ) {
-                Column(
-                    modifier = Modifier.padding(10.dp).width(96.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text("PDF", style = MaterialTheme.typography.titleSmall)
-                    Button(onClick = vm::previousDocumentPage, modifier = Modifier.fillMaxWidth()) { Text("▲") }
-                    Text(documentStatus.replace("PDF ", ""), style = MaterialTheme.typography.bodySmall)
-                    Button(onClick = vm::nextDocumentPage, modifier = Modifier.fillMaxWidth()) { Text("▼") }
-                }
-            }
-        }
+
     }
 }
 
